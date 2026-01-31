@@ -6,6 +6,11 @@ license = "MIT OR Apache-2.0"
 description = "A generic, `no_std` Rust driver for MKS SERVO42 closed-loop stepper motors."
 
 repository = "https://github.com/telenkov88/mks-servo42-rs"
+documentation = "https://docs.rs/mks-servo42-rs"
+
+readme = "README.md"
+keywords = ["stepper", "driver", "embedded", "no_std", "mks"]
+categories = ["embedded", "hardware-support", "no-std"]
 
 [lints.rust]
 unsafe_code = "forbid"
