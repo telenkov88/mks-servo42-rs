@@ -1,12 +1,16 @@
 use core::convert::TryFrom;
 
+/// Error returned when a byte cannot be converted to a `Response`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidResponse;
 
+/// Common response from the motor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Response {
+    /// Command execution failed.
     Failure = 0x00,
+    /// Command execution succeeded.
     Success = 0x01,
 }
 

@@ -1,15 +1,21 @@
 use crate::Error;
 
+/// Standard steps per revolution for a 1.8° motor.
 pub const STEPS_PER_REV: f32 = 200.0;
+/// Total resolution of the 16-bit encoder.
 pub const ENCODER_RESOLUTION: f32 = 65536.0;
 
+/// Represents an absolute encoder value including multi-turn carry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EncoderValue {
+    /// Number of full rotations (positive or negative).
     pub carry: i32,
+    /// 16-bit absolute position within the current turn.
     pub value: u16,
 }
 
 impl EncoderValue {
+    /// Converts the full multi-turn encoder value to total degrees.
     #[must_use]
     pub fn to_degrees(self) -> f32 {
         let degrees = (f32::from(self.value) / ENCODER_RESOLUTION) * 360.0;
@@ -17,6 +23,7 @@ impl EncoderValue {
     }
 }
 
+/// Utility to calculate required pulses for a given angle and microstepping level.
 #[must_use]
 pub fn angle_to_steps(angle: f32, microsteps: f32) -> u32 {
     let steps = (angle / 360.0) * STEPS_PER_REV * microsteps;
@@ -26,11 +33,16 @@ pub fn angle_to_steps(angle: f32, microsteps: f32) -> u32 {
     }
 }
 
+/// Converts a 16-bit encoder value to degrees (0-360).
 #[must_use]
 pub fn encoder_val_to_degrees(val: u16) -> f32 {
     (f32::from(val) / ENCODER_RESOLUTION) * 360.0
 }
 
+/// Parses raw serial feedback into an `EncoderValue`.
+///
+/// This function scans the provided buffer for a valid packet matching the
+/// MKS SERVO42 protocol.
 pub fn parse_encoder_response(data: &[u8]) -> Result<EncoderValue, Error> {
     let mut idx = 0;
     while idx < data.len() {

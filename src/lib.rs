@@ -1,3 +1,9 @@
+//! A generic, `no_std` Rust driver for **MKS SERVO42** closed-loop stepper motors.
+//!
+//! This library provides a type-safe interface for generating the serial protocol commands
+//! used by the MKS SERVO42C firmware (V1.0+). It is transport-agnostic, meaning it generates
+//! byte buffers that you can send over any serial interface (UART, USB-Serial, etc.).
+
 #![no_std]
 
 pub mod direction;
@@ -11,15 +17,23 @@ pub use errors::Error;
 pub use helpers::{angle_to_steps, encoder_val_to_degrees, parse_encoder_response, EncoderValue};
 pub use response::{InvalidResponse, Response};
 
+/// Default hardware address for MKS SERVO42 targets.
 pub const DEFAULT_ADDRESS: u8 = 0xE0;
+/// Minimum allowed slave address.
 pub const MIN_ADDRESS: u8 = 0xE0;
+/// Maximum allowed slave address.
 pub const MAX_ADDRESS: u8 = 0xE9;
 
+/// Maximum speed value for move commands.
 pub const MAX_SPEED: u8 = 0x7F;
+/// Maximum index for current limit settings.
 pub const MAX_CURRENT_INDEX: u8 = 0x0F;
+/// Maximum index for subdivision (microstepping).
 pub const MAX_SUBDIVISION_INDEX: u8 = 0x08;
+/// Maximum speed index for return-to-zero.
 pub const MAX_ZERO_SPEED: u8 = 0x04;
 
+/// Milliamps per unit of current limit index.
 pub const CURRENT_STEP_MA: u16 = 200;
 
 const CMD_BUFFER_SIZE: usize = 10;
@@ -63,6 +77,10 @@ mod cmd {
     pub const RUN_POSITION: u8 = 0xFD;
 }
 
+/// Main driver for communicating with an MKS SERVO42 motor.
+///
+/// This struct manages the slave address and an internal buffer used to
+/// construct serial commands.
 #[derive(Debug, Copy, Clone)]
 pub struct Driver {
     address: u8,
@@ -72,6 +90,7 @@ pub struct Driver {
 type Result<T> = core::result::Result<T, Error>;
 
 impl Default for Driver {
+    /// Creates a new driver with the default address (0xE0).
     fn default() -> Self {
         Self {
             address: DEFAULT_ADDRESS,
@@ -81,6 +100,7 @@ impl Default for Driver {
 }
 
 impl Driver {
+    /// Creates a new driver instance with a specific target address.
     #[must_use]
     pub fn with_address(address: u8) -> Self {
         Self {
@@ -89,10 +109,15 @@ impl Driver {
         }
     }
 
+    /// Generates a command to enable or disable the motor.
     pub fn enable_motor(&mut self, enable: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::ENABLE_MOTOR, u8::from(enable)])
     }
 
+    /// Generates a command to run the motor at a constant speed.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
     pub fn run_speed(&mut self, direction: direction::Direction, speed: u8) -> Result<&[u8]> {
         if speed > MAX_SPEED {
             return Err(Error::InvalidValue);
@@ -100,10 +125,15 @@ impl Driver {
         Ok(self.build_command(&[self.address, cmd::RUN_SPEED, speed | direction as u8]))
     }
 
+    /// Generates a command to stop the motor immediately.
     pub fn stop(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::STOP])
     }
 
+    /// Generates a command to move the motor to a specific position (relative pulses).
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
     pub fn run_position(
         &mut self,
         direction: direction::Direction,
@@ -125,18 +155,25 @@ impl Driver {
         ]))
     }
 
+    /// Generates a command to trigger encoder calibration.
     pub fn calibrate_encoder(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::CALIBRATE_ENCODER, 0x00])
     }
 
+    /// Generates a command to set the motor step angle.
     pub fn set_motor_type(&mut self, motor_type: MotorType) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_MOTOR_TYPE, motor_type as u8])
     }
 
+    /// Generates a command to set the motor work mode (Open/FOC/UART).
     pub fn set_work_mode(&mut self, mode: WorkMode) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_WORK_MODE, mode as u8])
     }
 
+    /// Generates a command to set the current limit index.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if index exceeds `MAX_CURRENT_INDEX`.
     pub fn set_current_limit(&mut self, index: u8) -> Result<&[u8]> {
         if index > MAX_CURRENT_INDEX {
             return Err(Error::InvalidValue);
@@ -144,6 +181,10 @@ impl Driver {
         Ok(self.build_command(&[self.address, cmd::SET_CURRENT_LIMIT, index]))
     }
 
+    /// Generates a command to set the subdivision (microstepping) level.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if index exceeds `MAX_SUBDIVISION_INDEX`.
     pub fn set_subdivision(&mut self, step_index: u8) -> Result<&[u8]> {
         if step_index > MAX_SUBDIVISION_INDEX {
             return Err(Error::InvalidValue);
@@ -151,30 +192,40 @@ impl Driver {
         Ok(self.build_command(&[self.address, cmd::SET_SUBDIVISION, step_index]))
     }
 
+    /// Generates a command to set the enable logic.
     pub fn set_enable_logic(&mut self, logic: EnLogic) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_EN_LOGIC, logic as u8])
     }
 
+    /// Generates a command to set the motor direction polarity.
     pub fn set_direction(&mut self, clockwise: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_DIRECTION, u8::from(!clockwise)])
     }
 
+    /// Generates a command to enable or disable automatic screen off.
     pub fn set_auto_screen_off(&mut self, enable: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_AUTO_SCREEN_OFF, u8::from(!enable)])
     }
 
+    /// Generates a command to enable or disable stall protection.
     pub fn set_stall_protection(&mut self, enable: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_PROTECTION, u8::from(!enable)])
     }
 
+    /// Generates a command to enable or disable step interpolation.
     pub fn set_interpolation(&mut self, enable: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_INTERPOLATION, u8::from(!enable)])
     }
 
+    /// Generates a command to set the UART baud rate.
     pub fn set_baud_rate(&mut self, rate: BaudRate) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_BAUD_RATE, rate as u8])
     }
 
+    /// Generates a command to change the motor's slave address.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if the address is not within the valid range.
     pub fn set_slave_address(&mut self, addr: u8) -> Result<&[u8]> {
         if !(MIN_ADDRESS..=MAX_ADDRESS).contains(&addr) {
             return Err(Error::InvalidValue);
@@ -182,14 +233,20 @@ impl Driver {
         Ok(self.build_command(&[self.address, cmd::SET_SLAVE_ADDR, addr - MIN_ADDRESS]))
     }
 
+    /// Generates a command to set the return-to-zero mode.
     pub fn set_zero_mode(&mut self, mode: ZeroMode) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_ZERO_MODE, mode as u8])
     }
 
+    /// Generates a command to set the current position as zero.
     pub fn set_current_as_zero(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_CURRENT_AS_ZERO, 0x00])
     }
 
+    /// Generates a command to set the return-to-zero speed.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if speed index exceeds `MAX_ZERO_SPEED`.
     pub fn set_zero_speed(&mut self, speed: u8) -> Result<&[u8]> {
         if speed > MAX_ZERO_SPEED {
             return Err(Error::InvalidValue);
@@ -197,59 +254,72 @@ impl Driver {
         Ok(self.build_command(&[self.address, cmd::SET_ZERO_SPEED, speed]))
     }
 
+    /// Generates a command to initiate return-to-zero sequence.
     pub fn go_to_zero(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::GO_TO_ZERO, 0x00])
     }
 
+    /// Generates a command to set the return-to-zero direction.
     pub fn set_zero_direction(&mut self, clockwise: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_ZERO_DIRECTION, u8::from(!clockwise)])
     }
 
+    /// Generates a command to set the position loop Proportional (Kp) coefficient.
     pub fn set_position_kp(&mut self, value: u16) -> &[u8] {
         let bytes = value.to_be_bytes();
         self.build_command(&[self.address, cmd::SET_POSITION_KP, bytes[0], bytes[1]])
     }
 
+    /// Generates a command to set the position loop Integral (Ki) coefficient.
     pub fn set_position_ki(&mut self, value: u16) -> &[u8] {
         let bytes = value.to_be_bytes();
         self.build_command(&[self.address, cmd::SET_POSITION_KI, bytes[0], bytes[1]])
     }
 
+    /// Generates a command to set the position loop Derivative (Kd) coefficient.
     pub fn set_position_kd(&mut self, value: u16) -> &[u8] {
         let bytes = value.to_be_bytes();
         self.build_command(&[self.address, cmd::SET_POSITION_KD, bytes[0], bytes[1]])
     }
 
+    /// Generates a command to set the motor acceleration.
     pub fn set_acceleration(&mut self, value: u16) -> &[u8] {
         let bytes = value.to_be_bytes();
         self.build_command(&[self.address, cmd::SET_ACCELERATION, bytes[0], bytes[1]])
     }
 
+    /// Generates a command to set the maximum torque limit.
     pub fn set_max_torque(&mut self, value: u16) -> &[u8] {
         let bytes = value.to_be_bytes();
         self.build_command(&[self.address, cmd::SET_MAX_TORQUE, bytes[0], bytes[1]])
     }
 
+    /// Generates a command to query the current stall protection state.
     pub fn query_protection_state(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::CHECK_PROTECTION])
     }
 
+    /// Generates a command to read the current encoder value.
     pub fn read_encoder_value(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::READ_ENCODER_VALUE])
     }
 
+    /// Generates a command to read the total pulse count.
     pub fn read_pulse_count(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::READ_PULSE_COUNT])
     }
 
+    /// Generates a command to read the motor shaft angle error.
     pub fn read_motor_shaft_angle_error(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::READ_MOTOR_SHAFT_ANGLE_ERROR])
     }
 
+    /// Generates a command to read the release status of the motor.
     pub fn read_release_status(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::READ_RELEASE_STATUS])
     }
 
+    /// Generates a command to restore all settings to default.
     pub fn restore_defaults(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::RESTORE_DEFAULTS])
     }

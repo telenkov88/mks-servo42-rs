@@ -1,7 +1,11 @@
+/// Crate errors.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Error {
+    /// Provided value is out of range.
     InvalidValue,
+    /// Checksum mismatch in received packet.
     Checksum,
+    /// Received packet has invalid format or length.
     InvalidPacket,
 }
 

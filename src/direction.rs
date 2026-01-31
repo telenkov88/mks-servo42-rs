@@ -1,7 +1,10 @@
+/// Motor rotation direction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Direction {
+    /// Clockwise / Forward rotation.
     Forward = 0x80,
+    /// Counter-clockwise / Reverse rotation.
     Reverse = 0x00,
 }
 
