@@ -1,0 +1,283 @@
+#![no_std]
+
+pub mod direction;
+pub mod enums;
+mod errors;
+pub mod helpers;
+pub mod response;
+
+pub use enums::{BaudRate, EnLogic, MotorType, WorkMode, ZeroMode};
+pub use errors::Error;
+pub use helpers::{angle_to_steps, encoder_val_to_degrees, parse_encoder_response, EncoderValue};
+pub use response::{InvalidResponse, Response};
+
+pub const DEFAULT_ADDRESS: u8 = 0xE0;
+pub const MIN_ADDRESS: u8 = 0xE0;
+pub const MAX_ADDRESS: u8 = 0xE9;
+
+pub const MAX_SPEED: u8 = 0x7F;
+pub const MAX_CURRENT_INDEX: u8 = 0x0F;
+pub const MAX_SUBDIVISION_INDEX: u8 = 0x08;
+pub const MAX_ZERO_SPEED: u8 = 0x04;
+
+pub const CURRENT_STEP_MA: u16 = 200;
+
+const CMD_BUFFER_SIZE: usize = 10;
+
+mod cmd {
+    pub const READ_ENCODER_VALUE: u8 = 0x30;
+    pub const READ_PULSE_COUNT: u8 = 0x33;
+    pub const READ_MOTOR_SHAFT_ANGLE_ERROR: u8 = 0x39;
+    pub const READ_RELEASE_STATUS: u8 = 0x3D;
+    pub const CHECK_PROTECTION: u8 = 0x3E;
+    pub const RESTORE_DEFAULTS: u8 = 0x3F;
+
+    pub const CALIBRATE_ENCODER: u8 = 0x80;
+    pub const SET_MOTOR_TYPE: u8 = 0x81;
+    pub const SET_WORK_MODE: u8 = 0x82;
+    pub const SET_CURRENT_LIMIT: u8 = 0x83;
+    pub const SET_SUBDIVISION: u8 = 0x84;
+    pub const SET_EN_LOGIC: u8 = 0x85;
+    pub const SET_DIRECTION: u8 = 0x86;
+    pub const SET_AUTO_SCREEN_OFF: u8 = 0x87;
+    pub const SET_PROTECTION: u8 = 0x88;
+    pub const SET_INTERPOLATION: u8 = 0x89;
+    pub const SET_BAUD_RATE: u8 = 0x8A;
+    pub const SET_SLAVE_ADDR: u8 = 0x8B;
+
+    pub const SET_ZERO_MODE: u8 = 0x90;
+    pub const SET_CURRENT_AS_ZERO: u8 = 0x91;
+    pub const SET_ZERO_SPEED: u8 = 0x92;
+    pub const SET_ZERO_DIRECTION: u8 = 0x93;
+    pub const GO_TO_ZERO: u8 = 0x94;
+
+    pub const SET_POSITION_KP: u8 = 0xA1;
+    pub const SET_POSITION_KI: u8 = 0xA2;
+    pub const SET_POSITION_KD: u8 = 0xA3;
+    pub const SET_ACCELERATION: u8 = 0xA4;
+    pub const SET_MAX_TORQUE: u8 = 0xA5;
+
+    pub const ENABLE_MOTOR: u8 = 0xF3;
+    pub const RUN_SPEED: u8 = 0xF6;
+    pub const STOP: u8 = 0xF7;
+    pub const RUN_POSITION: u8 = 0xFD;
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Driver {
+    address: u8,
+    buffer: [u8; CMD_BUFFER_SIZE],
+}
+
+type Result<T> = core::result::Result<T, Error>;
+
+impl Default for Driver {
+    fn default() -> Self {
+        Self {
+            address: DEFAULT_ADDRESS,
+            buffer: [0; CMD_BUFFER_SIZE],
+        }
+    }
+}
+
+impl Driver {
+    #[must_use]
+    pub fn with_address(address: u8) -> Self {
+        Self {
+            address,
+            ..Default::default()
+        }
+    }
+
+    pub fn enable_motor(&mut self, enable: bool) -> &[u8] {
+        self.build_command(&[self.address, cmd::ENABLE_MOTOR, u8::from(enable)])
+    }
+
+    pub fn run_speed(&mut self, direction: direction::Direction, speed: u8) -> Result<&[u8]> {
+        if speed > MAX_SPEED {
+            return Err(Error::InvalidValue);
+        }
+        Ok(self.build_command(&[self.address, cmd::RUN_SPEED, speed | direction as u8]))
+    }
+
+    pub fn stop(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::STOP])
+    }
+
+    pub fn run_position(
+        &mut self,
+        direction: direction::Direction,
+        speed: u8,
+        pulses: u32,
+    ) -> Result<&[u8]> {
+        if speed > MAX_SPEED {
+            return Err(Error::InvalidValue);
+        }
+        let pulse_bytes = pulses.to_be_bytes();
+        Ok(self.build_command(&[
+            self.address,
+            cmd::RUN_POSITION,
+            speed | direction as u8,
+            pulse_bytes[0],
+            pulse_bytes[1],
+            pulse_bytes[2],
+            pulse_bytes[3],
+        ]))
+    }
+
+    pub fn calibrate_encoder(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::CALIBRATE_ENCODER, 0x00])
+    }
+
+    pub fn set_motor_type(&mut self, motor_type: MotorType) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_MOTOR_TYPE, motor_type as u8])
+    }
+
+    pub fn set_work_mode(&mut self, mode: WorkMode) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_WORK_MODE, mode as u8])
+    }
+
+    pub fn set_current_limit(&mut self, index: u8) -> Result<&[u8]> {
+        if index > MAX_CURRENT_INDEX {
+            return Err(Error::InvalidValue);
+        }
+        Ok(self.build_command(&[self.address, cmd::SET_CURRENT_LIMIT, index]))
+    }
+
+    pub fn set_subdivision(&mut self, step_index: u8) -> Result<&[u8]> {
+        if step_index > MAX_SUBDIVISION_INDEX {
+            return Err(Error::InvalidValue);
+        }
+        Ok(self.build_command(&[self.address, cmd::SET_SUBDIVISION, step_index]))
+    }
+
+    pub fn set_enable_logic(&mut self, logic: EnLogic) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_EN_LOGIC, logic as u8])
+    }
+
+    pub fn set_direction(&mut self, clockwise: bool) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_DIRECTION, u8::from(!clockwise)])
+    }
+
+    pub fn set_auto_screen_off(&mut self, enable: bool) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_AUTO_SCREEN_OFF, u8::from(!enable)])
+    }
+
+    pub fn set_stall_protection(&mut self, enable: bool) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_PROTECTION, u8::from(!enable)])
+    }
+
+    pub fn set_interpolation(&mut self, enable: bool) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_INTERPOLATION, u8::from(!enable)])
+    }
+
+    pub fn set_baud_rate(&mut self, rate: BaudRate) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_BAUD_RATE, rate as u8])
+    }
+
+    pub fn set_slave_address(&mut self, addr: u8) -> Result<&[u8]> {
+        if !(MIN_ADDRESS..=MAX_ADDRESS).contains(&addr) {
+            return Err(Error::InvalidValue);
+        }
+        Ok(self.build_command(&[self.address, cmd::SET_SLAVE_ADDR, addr - MIN_ADDRESS]))
+    }
+
+    pub fn set_zero_mode(&mut self, mode: ZeroMode) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_ZERO_MODE, mode as u8])
+    }
+
+    pub fn set_current_as_zero(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_CURRENT_AS_ZERO, 0x00])
+    }
+
+    pub fn set_zero_speed(&mut self, speed: u8) -> Result<&[u8]> {
+        if speed > MAX_ZERO_SPEED {
+            return Err(Error::InvalidValue);
+        }
+        Ok(self.build_command(&[self.address, cmd::SET_ZERO_SPEED, speed]))
+    }
+
+    pub fn go_to_zero(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::GO_TO_ZERO, 0x00])
+    }
+
+    pub fn set_zero_direction(&mut self, clockwise: bool) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_ZERO_DIRECTION, u8::from(!clockwise)])
+    }
+
+    pub fn set_position_kp(&mut self, value: u16) -> &[u8] {
+        let bytes = value.to_be_bytes();
+        self.build_command(&[self.address, cmd::SET_POSITION_KP, bytes[0], bytes[1]])
+    }
+
+    pub fn set_position_ki(&mut self, value: u16) -> &[u8] {
+        let bytes = value.to_be_bytes();
+        self.build_command(&[self.address, cmd::SET_POSITION_KI, bytes[0], bytes[1]])
+    }
+
+    pub fn set_position_kd(&mut self, value: u16) -> &[u8] {
+        let bytes = value.to_be_bytes();
+        self.build_command(&[self.address, cmd::SET_POSITION_KD, bytes[0], bytes[1]])
+    }
+
+    pub fn set_acceleration(&mut self, value: u16) -> &[u8] {
+        let bytes = value.to_be_bytes();
+        self.build_command(&[self.address, cmd::SET_ACCELERATION, bytes[0], bytes[1]])
+    }
+
+    pub fn set_max_torque(&mut self, value: u16) -> &[u8] {
+        let bytes = value.to_be_bytes();
+        self.build_command(&[self.address, cmd::SET_MAX_TORQUE, bytes[0], bytes[1]])
+    }
+
+    pub fn query_protection_state(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::CHECK_PROTECTION])
+    }
+
+    pub fn read_encoder_value(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_ENCODER_VALUE])
+    }
+
+    pub fn read_pulse_count(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_PULSE_COUNT])
+    }
+
+    pub fn read_motor_shaft_angle_error(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_MOTOR_SHAFT_ANGLE_ERROR])
+    }
+
+    pub fn read_release_status(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_RELEASE_STATUS])
+    }
+
+    pub fn restore_defaults(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::RESTORE_DEFAULTS])
+    }
+
+    fn build_command(&mut self, cmd: &[u8]) -> &[u8] {
+        let len = cmd.len();
+        self.buffer[..len].copy_from_slice(cmd);
+        self.buffer[len] = calculate_checksum(cmd);
+        &self.buffer[..=len]
+    }
+}
+
+fn calculate_checksum(bytes: &[u8]) -> u8 {
+    bytes.iter().fold(0u8, |acc, &b| acc.wrapping_add(b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_checksum() {
+        assert_eq!(0xD7, calculate_checksum(&[0xE0, 0xF6, 0x01]));
+    }
+
+    #[test]
+    fn test_default_address() {
+        let driver = Driver::default();
+        assert_eq!(driver.address, DEFAULT_ADDRESS);
+    }
+}
