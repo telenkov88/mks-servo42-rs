@@ -72,6 +72,60 @@ pub fn parse_encoder_response(data: &[u8]) -> Result<EncoderValue, Error> {
     Err(Error::InvalidPacket)
 }
 
+/// Represents an encoder shaft error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShaftErrValue {
+    /// 16-bit shaft error in encoder units.
+    pub value: i16,
+}
+
+impl ShaftErrValue {
+    /// Converts the full multi-turn encoder value to total degrees.
+    #[must_use]
+    pub fn to_degrees(self) -> f32 {
+        f32::from(self.value) / 360.0
+    }
+}
+
+/// Parses the motor shaft angle error response.
+///
+/// This function parses responses from the `READ_MOTOR_SHAFT_ANGLE_ERROR` command (0x39).
+/// The response format is: `[slave_address, error_low_byte, error_high_byte, crc, trailing 0x00]`
+/// where the error is a signed 16-bit integer representing the angle error in encoder units.
+/// return value in error in encoder units
+///
+/// According to the MKS SERVO42 protocol:
+/// - 0x0000-0xFFFF corresponds to 0-360°
+/// - 1° error ≈ 182 encoder units (65536/360)
+pub fn parse_motor_shaft_angle_error(data: &[u8]) -> Result<ShaftErrValue, Error> {
+    let mut idx = 0;
+    while idx < data.len() {
+        if data[idx] >= crate::MIN_ADDRESS
+            && data[idx] <= crate::MAX_ADDRESS
+            && idx + 4 < data.len()
+        {
+            // Check for the trailing 0x00 byte (undocumented unexpected byte)
+            if data[idx + 4] != 0x00 {
+                idx += 1;
+                continue;
+            }
+
+            let sum: u32 = data[idx..idx + 3].iter().map(|&b| u32::from(b)).sum();
+            if (sum as u8) != data[idx + 3] {
+                idx += 1;
+                continue;
+            }
+
+            let error_bytes = &data[idx + 1..idx + 3];
+            let value = i16::from_be_bytes([error_bytes[0], error_bytes[1]]);
+            return Ok(ShaftErrValue { value });
+        }
+        idx += 1;
+    }
+
+    Err(Error::InvalidPacket)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +183,78 @@ mod tests {
     fn test_parse_encoder_response_invalid_checksum() {
         let data = [0xE0, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x21];
         let res = parse_encoder_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_motor_shaft_angle_error() {
+        // Example from documentation: e0 00 B7 97 00 (error 1°)
+        let data = [0xE0, 0x00, 0xB7, 0x97, 0x00];
+        let error = parse_motor_shaft_angle_error(&data).unwrap();
+        let shaft_error = ShaftErrValue { value: 183 };
+        assert_eq!(error, shaft_error); // 183 encoder units ≈ 1°
+
+        // Test with negative error (two's complement)
+        // Example: e0 FF 4A 29 00 (error -182 ≈ -1°)
+        // Checksum: 0xE0 + 0xFF + 0x4A = 0x229 → low byte 0x29
+        let data = [0xE0, 0xFF, 0x4A, 0x29, 0x00];
+        let error = parse_motor_shaft_angle_error(&data).unwrap();
+        let shaft_error = ShaftErrValue { value: -182 };
+        assert_eq!(error, shaft_error); // 0xFF4A = -182 encoder units ≈ -1°
+
+        // Test zero error
+        // Checksum: 0xE0 + 0x00 + 0x00 = 0xE0
+        let data = [0xE0, 0x00, 0x00, 0xE0, 0x00];
+        let error = parse_motor_shaft_angle_error(&data).unwrap();
+        let shaft_error = ShaftErrValue { value: 0 };
+        assert_eq!(error, shaft_error);
+
+        // Test maximum positive error (0x7FFF = 32767)
+        // Checksum: 0xE0 + 0x7F + 0xFF = 0x25E → low byte 0x5E
+        let data = [0xE0, 0x7F, 0xFF, 0x5E, 0x00];
+        let error = parse_motor_shaft_angle_error(&data).unwrap();
+        let shaft_error = ShaftErrValue { value: 32767 };
+        assert_eq!(error, shaft_error);
+    }
+
+    #[test]
+    fn test_parse_motor_shaft_angle_error_with_prefix() {
+        // Test with garbage bytes before valid packet
+        let data = [0xFF, 0xFE, 0xE0, 0x00, 0xB7, 0x97, 0x00];
+        let error = parse_motor_shaft_angle_error(&data).unwrap();
+        let shaft_error = ShaftErrValue { value: 183 };
+        assert_eq!(error, shaft_error);
+    }
+
+    #[test]
+    fn test_parse_motor_shaft_angle_error_invalid_checksum() {
+        // Wrong checksum
+        let data = [0xE0, 0x00, 0xB7, 0x98, 0x00];
+        let res = parse_motor_shaft_angle_error(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_motor_shaft_angle_error_missing_trailing_zero() {
+        // Missing trailing 0x00 byte
+        let data = [0xE0, 0x00, 0xB7, 0x97, 0x01];
+        let res = parse_motor_shaft_angle_error(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_motor_shaft_angle_error_too_short() {
+        // Packet too short
+        let data = [0xE0, 0x00, 0xB7, 0x97];
+        let res = parse_motor_shaft_angle_error(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_motor_shaft_angle_error_invalid_address() {
+        // Invalid address (outside E0-E9 range)
+        let data = [0xDF, 0x00, 0xB7, 0x97, 0x00];
+        let res = parse_motor_shaft_angle_error(&data);
         assert!(matches!(res, Err(Error::InvalidPacket)));
     }
 }

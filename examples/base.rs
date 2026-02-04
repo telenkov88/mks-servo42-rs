@@ -76,7 +76,7 @@ fn read_response(s: &mut impl SerialPort) -> Result<Vec<u8>, Error> {
 
 fn parse_encoder(data: &[u8]) -> Result<f32, Error> {
     match mks_servo42_rs::parse_encoder_response(data) {
-        Ok(ev) => Ok(ev.to_degrees()),
+        Ok(encoder_value) => Ok(encoder_value.to_degrees()),
         Err(e) => Err(Error::Protocol(format!("Parse error: {:?}", e.as_str()))),
     }
 }
@@ -259,5 +259,13 @@ fn main() -> Result<(), Error> {
         );
     }
 
+    println!("Reading motor shaft angle error");
+    let cmd = driver.read_motor_shaft_angle_error();
+    send_command(&mut s, cmd)?;
+
+    thread::sleep(Duration::from_millis(100));
+    let response = read_response(&mut s)?;
+    let shaft_err_value = mks_servo42_rs::parse_motor_shaft_angle_error(&response)?;
+    println!("Shaft Error Angle: {:?}", shaft_err_value.to_degrees());
     Ok(())
 }

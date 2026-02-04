@@ -14,7 +14,10 @@ pub mod response;
 
 pub use enums::{BaudRate, EnLogic, MotorType, WorkMode, ZeroMode};
 pub use errors::Error;
-pub use helpers::{angle_to_steps, encoder_val_to_degrees, parse_encoder_response, EncoderValue};
+pub use helpers::{
+    angle_to_steps, encoder_val_to_degrees, parse_encoder_response, parse_motor_shaft_angle_error,
+    EncoderValue,
+};
 pub use response::{InvalidResponse, Response};
 
 /// Default hardware address for MKS SERVO42 targets.
