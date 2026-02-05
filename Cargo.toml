@@ -108,7 +108,9 @@ private-doc-tests = "warn"
 unescaped-backticks = "warn"
 
 [dev-dependencies]
+lazy_static = "1"
 serial = "0.4"
+dotenvy = { version = "0.15", default-features = false }
 
 [dependencies]
-dotenv = "0.15.0"
+dotenv = "0.15"

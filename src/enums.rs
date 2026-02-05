@@ -61,3 +61,13 @@ pub enum ZeroMode {
     /// Near-point-based return to zero.
     NearMode = 0x02,
 }
+
+/// Save/Clear status operation.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SaveClearStatus {
+    /// Save the current status.
+    Save = 0xC8,
+    /// Clear the saved status.
+    Clear = 0xCA,
+}

@@ -12,11 +12,12 @@ mod errors;
 pub mod helpers;
 pub mod response;
 
-pub use enums::{BaudRate, EnLogic, MotorType, WorkMode, ZeroMode};
+pub use enums::{BaudRate, EnLogic, MotorType, SaveClearStatus, WorkMode, ZeroMode};
 pub use errors::Error;
 pub use helpers::{
-    angle_to_steps, encoder_val_to_degrees, parse_encoder_response, parse_motor_shaft_angle_error,
-    EncoderValue,
+    angle_to_steps, encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
+    parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, EnPinStatus, EncoderValue,
+    MotorShaftAngle, ShaftErrValue,
 };
 pub use response::{InvalidResponse, Response};
 
@@ -44,10 +45,13 @@ const CMD_BUFFER_SIZE: usize = 10;
 mod cmd {
     pub const READ_ENCODER_VALUE: u8 = 0x30;
     pub const READ_PULSE_COUNT: u8 = 0x33;
+    pub const READ_MOTOR_SHAFT_ANGLE: u8 = 0x36;
     pub const READ_MOTOR_SHAFT_ANGLE_ERROR: u8 = 0x39;
+    pub const READ_EN_PIN_STATUS: u8 = 0x3A;
     pub const READ_RELEASE_STATUS: u8 = 0x3D;
     pub const CHECK_PROTECTION: u8 = 0x3E;
     pub const RESTORE_DEFAULTS: u8 = 0x3F;
+    pub const SAVE_CLEAR_STATUS: u8 = 0xFF;
 
     pub const CALIBRATE_ENCODER: u8 = 0x80;
     pub const SET_MOTOR_TYPE: u8 = 0x81;
@@ -131,6 +135,14 @@ impl Driver {
     /// Generates a command to stop the motor immediately.
     pub fn stop(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::STOP])
+    }
+
+    /// Generates a command to save or clear the current status.
+    ///
+    /// This command is used to save or clear the status set by the `set_work_mode` command.
+    /// After saving successfully, the driver board will be disabled and needs to be re-enabled.
+    pub fn save_clear_status(&mut self, operation: SaveClearStatus) -> &[u8] {
+        self.build_command(&[self.address, cmd::SAVE_CLEAR_STATUS, operation as u8])
     }
 
     /// Generates a command to move the motor to a specific position (relative pulses).
@@ -310,6 +322,24 @@ impl Driver {
     /// Generates a command to read the total pulse count.
     pub fn read_pulse_count(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::READ_PULSE_COUNT])
+    }
+
+    /// Generates a command to read the motor shaft angle.
+    ///
+    /// Returns a 4-byte signed integer representing the angle in encoder units.
+    /// One full rotation corresponds to 0-65535.
+    pub fn read_motor_shaft_angle(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_MOTOR_SHAFT_ANGLE])
+    }
+
+    /// Generates a command to read the EN pin status.
+    ///
+    /// Returns:
+    /// - 0x01: Enable
+    /// - 0x02: Disable  
+    /// - 0x00: Error
+    pub fn read_en_pin_status(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_EN_PIN_STATUS])
     }
 
     /// Generates a command to read the motor shaft angle error.
