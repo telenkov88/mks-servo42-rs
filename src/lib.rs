@@ -40,6 +40,9 @@ pub const MAX_ZERO_SPEED: u8 = 0x04;
 /// Milliamps per unit of current limit index.
 pub const CURRENT_STEP_MA: u16 = 200;
 
+/// Maximum torque limit (0x4B0).
+pub const MAX_TORQUE_LIMIT: u16 = 0x4B0;
+
 const CMD_BUFFER_SIZE: usize = 10;
 
 mod cmd {
@@ -304,9 +307,15 @@ impl Driver {
     }
 
     /// Generates a command to set the maximum torque limit.
-    pub fn set_max_torque(&mut self, value: u16) -> &[u8] {
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if value exceeds `MAX_TORQUE_LIMIT`.
+    pub fn set_max_torque(&mut self, value: u16) -> Result<&[u8]> {
+        if value > MAX_TORQUE_LIMIT {
+            return Err(Error::InvalidValue);
+        }
         let bytes = value.to_be_bytes();
-        self.build_command(&[self.address, cmd::SET_MAX_TORQUE, bytes[0], bytes[1]])
+        Ok(self.build_command(&[self.address, cmd::SET_MAX_TORQUE, bytes[0], bytes[1]]))
     }
 
     /// Generates a command to query the current stall protection state.

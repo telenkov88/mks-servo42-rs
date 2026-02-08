@@ -54,5 +54,5 @@ pub fn validate_safe_angle(angle_degrees: f32) -> Result<(), String> {
         ))
     } else {
         Ok(())
-     }
+    }
 }

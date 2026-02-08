@@ -459,7 +459,7 @@ fn test_set_max_torque() -> TestResult<()> {
     let default_torque = 0x4B0;
     println!("Setting max torque to default {}...", default_torque);
 
-    let cmd = ctx.driver.set_max_torque(default_torque);
+    let cmd = ctx.driver.set_max_torque(default_torque)?;
     let response = ctx.serial.send_and_read(cmd)?;
 
     if !response.is_empty() && response.len() >= 3 {
@@ -523,6 +523,172 @@ fn test_misc_config() -> TestResult<()> {
         println!("Failed set_interpolation: {:?}", response);
     }
 
+    Ok(())
+}
+
+/// Test setting position KP
+#[test]
+fn test_set_position_kp() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: set_position_kp ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // Default 0x650
+    let default_kp = 0x650;
+    println!("Setting position KP to default {}...", default_kp);
+
+    let cmd = ctx.driver.set_position_kp(default_kp);
+    let response = ctx.serial.send_and_read(cmd)?;
+
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Position KP set successfully");
+    } else {
+        println!("Failed to set position KP: response {:02x?}", response);
+        return Err(TestError::Protocol(format!(
+            "Failed to set position KP: {:?}",
+            response
+        )));
+    }
+
+    println!("Test passed!");
+    Ok(())
+}
+
+/// Test setting position KI
+#[test]
+fn test_set_position_ki() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: set_position_ki ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // Default 1
+    let default_ki = 1;
+    println!("Setting position KI to default {}...", default_ki);
+
+    let cmd = ctx.driver.set_position_ki(default_ki);
+    let response = ctx.serial.send_and_read(cmd)?;
+
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Position KI set successfully");
+    } else {
+        println!("Failed to set position KI: response {:02x?}", response);
+        return Err(TestError::Protocol(format!(
+            "Failed to set position KI: {:?}",
+            response
+        )));
+    }
+
+    println!("Test passed!");
+    Ok(())
+}
+
+/// Test setting position KD
+#[test]
+fn test_set_position_kd() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: set_position_kd ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // Default 0x650
+    let default_kd = 0x650;
+    println!("Setting position KD to default {}...", default_kd);
+
+    let cmd = ctx.driver.set_position_kd(default_kd);
+    let response = ctx.serial.send_and_read(cmd)?;
+
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Position KD set successfully");
+    } else {
+        println!("Failed to set position KD: response {:02x?}", response);
+        return Err(TestError::Protocol(format!(
+            "Failed to set position KD: {:?}",
+            response
+        )));
+    }
+
+    println!("Test passed!");
+    Ok(())
+}
+
+/// Test setting acceleration
+#[test]
+fn test_set_acceleration() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: set_acceleration ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // Default 0x11e
+    let default_acc = 0x11e;
+    println!("Setting acceleration to default {}...", default_acc);
+
+    let cmd = ctx.driver.set_acceleration(default_acc);
+    let response = ctx.serial.send_and_read(cmd)?;
+
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Acceleration set successfully");
+    } else {
+        println!("Failed to set acceleration: response {:02x?}", response);
+        return Err(TestError::Protocol(format!(
+            "Failed to set acceleration: {:?}",
+            response
+        )));
+    }
+
+    println!("Test passed!");
+    Ok(())
+}
+
+/// Test setting max torque out of range
+#[test]
+fn test_set_max_torque_out_of_range() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: set_max_torque_out_of_range ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // Max allowed is 0x4B0. Try 0x4B1.
+    let out_of_range_torque = 0x4B1;
+    println!(
+        "Attempting to set max torque to {} (limit is 0x4B0)...",
+        out_of_range_torque
+    );
+
+    let result = ctx.driver.set_max_torque(out_of_range_torque);
+
+    match result {
+        Ok(_) => {
+            println!("Error: mismatched expectation. Should have failed.");
+            return Err(TestError::Protocol(
+                "Driver allowed out of range torque".into(),
+            ));
+        }
+        Err(mks_servo42_rs::Error::InvalidValue) => {
+            println!("Driver correctly rejected out of range torque with InvalidValue.");
+        }
+        Err(e) => {
+            println!("Driver failed with unexpected error: {:?}", e);
+            return Err(TestError::Protocol(format!(
+                "Unexpected error type: {:?}",
+                e
+            )));
+        }
+    }
+
+    println!("Test passed!");
     Ok(())
 }
 
