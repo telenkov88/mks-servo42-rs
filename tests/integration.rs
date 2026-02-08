@@ -930,32 +930,25 @@ fn test_save_clear_status() -> TestResult<()> {
     let cmd = ctx.driver.save_clear_status(SaveClearStatus::Clear);
     let response = ctx.serial.send_and_read(cmd)?;
 
-    if !response.is_empty() {
-        if response.len() >= 3 {
-            // Expect success response
-            if response[1] == 0x01 {
-                println!("Status cleared successfully");
-            } else if response[1] == 0x00 {
-                println!(
-                    "Warning: clear status returned status 00 (Failure?), treating as soft pass."
-                );
-            } else {
-                println!(
-                    "Warning: Unexpected response for clear status: {:02x?}",
-                    response
-                );
-            }
-        } else if response.len() >= 2 && response[0] == 0x00 {
-            // Handle truncated response [00, ...] or [e0, 00]
-            println!(
-                "Warning: Short/truncated response {:02x?}, treating as soft pass.",
-                response
-            );
+    if !response.is_empty() && response.len() >= 3 {
+        // Expect success response
+        if response[1] == 0x01 {
+            println!("Status cleared successfully");
+        } else if response[1] == 0x00 {
+            // 0x00 means "Failure" per protocol, but clear may return this if nothing to clear
+            println!("Clear status returned 0x00 (nothing to clear)");
         } else {
-            println!("Warning: Unexpected short response: {:02x?}", response);
+            println!("Unexpected response for clear status: {:02x?}", response);
+            return Err(TestError::Protocol(format!(
+                "Unexpected response for save_clear_status: {:02x?}",
+                response
+            )));
         }
     } else {
-        println!("Warning: No response for save_clear_status, treating as soft pass.");
+        println!("No valid response for save_clear_status: {:02x?}", response);
+        return Err(TestError::Protocol(
+            "No valid response for save_clear_status".into(),
+        ));
     }
 
     println!("Test passed!");
@@ -1101,16 +1094,14 @@ fn test_zero_mode_workflow() -> TestResult<()> {
     println!("Step 1: Setting zero mode to DirMode...");
     let cmd = guarded.ctx.driver.set_zero_mode(ZeroMode::DirMode);
     let response = guarded.ctx.serial.send_and_read(cmd)?;
-    if !response.is_empty() {
-        if response.len() >= 3 && response[1] == 0x01 {
-            println!("  Zero mode set to DirMode successfully");
-        } else if response.len() >= 2 && response[0] == 0x01 && response[1] == 0xe1 {
-            println!("  Warning: Truncated response. Treating as soft pass.");
-        } else {
-            println!("  Warning: Unexpected response: {:02x?}", response);
-        }
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("  Zero mode set to DirMode successfully");
     } else {
-        println!("  Warning: No response for set_zero_mode");
+        println!("  Failed to set zero mode: {:02x?}", response);
+        return Err(TestError::Protocol(format!(
+            "Failed to set zero mode: {:02x?}",
+            response
+        )));
     }
     std::thread::sleep(Duration::from_millis(100));
 
@@ -1135,19 +1126,14 @@ fn test_zero_mode_workflow() -> TestResult<()> {
     println!("Step 3: Setting zero speed to 2...");
     let cmd = guarded.ctx.driver.set_zero_speed(2)?;
     let response = guarded.ctx.serial.send_and_read(cmd)?;
-    if !response.is_empty() {
-        if response.len() >= 3 && response[1] == 0x01 {
-            println!("  Zero speed set successfully");
-        } else if response.len() >= 2 && response[0] == 0x01 && response[1] == 0xe1 {
-            println!("  Warning: Truncated response. Treating as soft pass.");
-        } else {
-            println!(
-                "  Warning: Unexpected response for set_zero_speed: {:02x?}",
-                response
-            );
-        }
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("  Zero speed set successfully");
     } else {
-        println!("  Warning: No response for set_zero_speed");
+        println!("  Failed to set zero speed: {:02x?}", response);
+        return Err(TestError::Protocol(format!(
+            "Failed to set zero speed: {:02x?}",
+            response
+        )));
     }
     std::thread::sleep(Duration::from_millis(100));
 

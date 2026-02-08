@@ -114,18 +114,32 @@ impl TestSerialPort {
         Ok(Self { port: boxed_port })
     }
 
-    /// Clear input buffer logic
+    /// Clear input buffer logic - performs multiple drain passes for reliability
     pub fn clear_input_buffer(&mut self) -> TestResult<()> {
         self.port.set_timeout(Duration::from_millis(50))?;
         let mut buffer = [0u8; 1024];
-        loop {
-            match self.port.read(&mut buffer) {
-                Ok(n) if n > 0 => {
-                    println!("Drained {} bytes: {:02x?}", n, &buffer[..n]);
+        let mut total_drained = 0;
+
+        // Perform multiple drain passes to ensure buffer is fully cleared
+        for _pass in 0..3 {
+            loop {
+                match self.port.read(&mut buffer) {
+                    Ok(n) if n > 0 => {
+                        println!("Drained {} bytes: {:02x?}", n, &buffer[..n]);
+                        total_drained += n;
+                    }
+                    _ => break,
                 }
-                _ => break,
             }
+            // Small delay between passes to allow any in-flight data to arrive
+            thread::sleep(Duration::from_millis(10));
         }
+
+        if total_drained > 0 {
+            // Extra delay after significant drain to ensure stability
+            thread::sleep(Duration::from_millis(20));
+        }
+
         self.port.set_timeout(DEFAULT_TIMEOUT)?;
         Ok(())
     }
