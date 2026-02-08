@@ -23,6 +23,7 @@ impl Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+    extern crate std;
 
     #[test]
     fn test_error_display() {
@@ -33,9 +34,9 @@ mod tests {
 
     #[test]
     fn test_error_debug() {
-        assert_eq!(format!("{:?}", Error::InvalidValue), "InvalidValue");
-        assert_eq!(format!("{:?}", Error::Checksum), "Checksum");
-        assert_eq!(format!("{:?}", Error::InvalidPacket), "InvalidPacket");
+        assert_eq!(std::format!("{:?}", Error::InvalidValue), "InvalidValue");
+        assert_eq!(std::format!("{:?}", Error::Checksum), "Checksum");
+        assert_eq!(std::format!("{:?}", Error::InvalidPacket), "InvalidPacket");
     }
 
     #[test]
