@@ -3,7 +3,7 @@
 use mks_servo42_rs::Driver;
 use serial::{SerialPort, SerialPortSettings};
 use std::env;
-use std::io::{Error as IoError, Read, Write};
+use std::io::{Read, Write};
 use std::thread;
 use std::time::Duration;
 
@@ -38,13 +38,18 @@ pub type TestResult<T> = Result<T, TestError>;
 
 /// Test error type
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum TestError {
-    Io(IoError),
-    Serial(serial::Error),
-    Servo(mks_servo42_rs::Error),
+    Serial(String),
+    Servo(String),
     Protocol(String),
     Safety(String),
-    Timeout,
+}
+
+impl From<&str> for TestError {
+    fn from(err: &str) -> Self {
+        Self::Safety(err.to_string())
+    }
 }
 
 impl From<String> for TestError {
@@ -53,27 +58,33 @@ impl From<String> for TestError {
     }
 }
 
-impl From<IoError> for TestError {
-    fn from(err: IoError) -> Self {
-        Self::Io(err)
+impl From<std::io::Error> for TestError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Safety(err.to_string())
     }
 }
 
 impl From<serial::Error> for TestError {
     fn from(err: serial::Error) -> Self {
-        Self::Serial(err)
+        Self::Serial(err.to_string())
     }
 }
 
 impl From<mks_servo42_rs::Error> for TestError {
     fn from(err: mks_servo42_rs::Error) -> Self {
-        Self::Servo(err)
+        Self::Servo(format!("{:?}", err))
     }
 }
 
 /// Serial port wrapper for testing
 pub struct TestSerialPort {
     port: Box<dyn SerialPort + Send>,
+}
+
+impl std::fmt::Debug for TestSerialPort {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TestSerialPort").finish()
+    }
 }
 
 impl TestSerialPort {
@@ -129,7 +140,7 @@ impl TestSerialPort {
             }
             Err(e) => {
                 println!("RX Error: {:?}", e);
-                Err(TestError::Io(e))
+                Err(TestError::Safety(e.to_string()))
             }
         }
     }
@@ -151,6 +162,7 @@ impl TestSerialPort {
 }
 
 /// Test context containing driver and serial port
+#[derive(Debug)]
 pub struct TestContext {
     pub driver: Driver,
     pub serial: TestSerialPort,
@@ -166,12 +178,14 @@ impl TestContext {
     }
 
     /// Reset driver state (create new instance)
+    #[allow(dead_code)]
     pub fn reset_driver(&mut self) {
         self.driver = Driver::default();
     }
 }
 
 /// Helper to parse encoder response
+#[allow(dead_code)]
 pub fn parse_encoder_response(data: &[u8]) -> TestResult<f32> {
     match mks_servo42_rs::parse_encoder_response(data) {
         Ok(encoder_value) => Ok(encoder_value.to_degrees()),
@@ -183,6 +197,7 @@ pub fn parse_encoder_response(data: &[u8]) -> TestResult<f32> {
 }
 
 /// Helper to parse motor shaft angle response
+#[allow(dead_code)]
 pub fn parse_motor_shaft_angle_response(data: &[u8]) -> TestResult<f32> {
     match mks_servo42_rs::parse_motor_shaft_angle_response(data) {
         Ok(angle) => Ok(angle.to_degrees()),
@@ -194,6 +209,7 @@ pub fn parse_motor_shaft_angle_response(data: &[u8]) -> TestResult<f32> {
 }
 
 /// Helper to parse motor shaft angle error response
+#[allow(dead_code)]
 pub fn parse_motor_shaft_angle_error_response(data: &[u8]) -> TestResult<f32> {
     match mks_servo42_rs::parse_motor_shaft_angle_error(data) {
         Ok(error) => Ok(error.to_degrees()),
@@ -205,6 +221,7 @@ pub fn parse_motor_shaft_angle_error_response(data: &[u8]) -> TestResult<f32> {
 }
 
 /// Helper to parse EN pin status response
+#[allow(dead_code)]
 pub fn parse_en_pin_status_response(data: &[u8]) -> TestResult<mks_servo42_rs::EnPinStatus> {
     match mks_servo42_rs::parse_en_pin_status_response(data) {
         Ok(status) => Ok(status),
@@ -216,11 +233,12 @@ pub fn parse_en_pin_status_response(data: &[u8]) -> TestResult<mks_servo42_rs::E
 }
 
 /// Check if response indicates success
+#[allow(dead_code)]
 pub fn check_success_response(data: &[u8]) -> TestResult<bool> {
     if data.len() >= 3 {
         // Response format: [address, 0x01 (success), checksum]
         Ok(data[1] == 0x01)
     } else {
-        Err(TestError::Protocol("Response too short".into()))
+        Err(TestError::from("Response too short"))
     }
 }
