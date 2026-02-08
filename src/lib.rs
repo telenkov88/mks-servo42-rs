@@ -56,8 +56,6 @@ mod cmd {
     pub const SAVE_CLEAR_STATUS: u8 = 0xFF;
 
     pub const CALIBRATE_ENCODER: u8 = 0x80;
-    pub const SET_MOTOR_TYPE: u8 = 0x81;
-    pub const SET_WORK_MODE: u8 = 0x82;
     pub const SET_CURRENT_LIMIT: u8 = 0x83;
     pub const SET_SUBDIVISION: u8 = 0x84;
     pub const SET_EN_LOGIC: u8 = 0x85;
@@ -65,7 +63,6 @@ mod cmd {
     pub const SET_AUTO_SCREEN_OFF: u8 = 0x87;
     pub const SET_PROTECTION: u8 = 0x88;
     pub const SET_INTERPOLATION: u8 = 0x89;
-    pub const SET_BAUD_RATE: u8 = 0x8A;
 
     pub const SET_ZERO_MODE: u8 = 0x90;
     pub const SET_CURRENT_AS_ZERO: u8 = 0x91;
@@ -176,16 +173,6 @@ impl Driver {
         self.build_command(&[self.address, cmd::CALIBRATE_ENCODER, 0x00])
     }
 
-    /// Generates a command to set the motor step angle.
-    pub fn set_motor_type(&mut self, motor_type: MotorType) -> &[u8] {
-        self.build_command(&[self.address, cmd::SET_MOTOR_TYPE, motor_type as u8])
-    }
-
-    /// Generates a command to set the motor work mode (Open/FOC/UART).
-    pub fn set_work_mode(&mut self, mode: WorkMode) -> &[u8] {
-        self.build_command(&[self.address, cmd::SET_WORK_MODE, mode as u8])
-    }
-
     /// Generates a command to set the current limit index.
     ///
     /// # Errors
@@ -231,11 +218,6 @@ impl Driver {
     /// Generates a command to enable or disable step interpolation.
     pub fn set_interpolation(&mut self, enable: bool) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_INTERPOLATION, u8::from(!enable)])
-    }
-
-    /// Generates a command to set the UART baud rate.
-    pub fn set_baud_rate(&mut self, rate: BaudRate) -> &[u8] {
-        self.build_command(&[self.address, cmd::SET_BAUD_RATE, rate as u8])
     }
 
     /// Generates a command to set the return-to-zero mode.

@@ -19,9 +19,9 @@ coverage:
 	export RUSTFLAGS="-C instrument-coverage" && \
 	export LLVM_PROFILE_FILE="target/coverage/cargo-test-%p-%m.profraw" && \
 	cargo test
-	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" -o target/coverage/html
-	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t cobertura --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" -o target/coverage/cobertura.xml
-	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t markdown --branch --ignore-not-existing --ignore "/*" --ignore "tests/*"
+	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t html --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" --excl-line "#\[test\]" --excl-start "mod tests \{" --excl-stop "^\}" -o target/coverage/html
+	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t cobertura --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" --excl-line "#\[test\]" --excl-start "mod tests \{" --excl-stop "^\}" -o target/coverage/cobertura.xml
+	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t markdown --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" --excl-line "#\[test\]" --excl-start "mod tests \{" --excl-stop "^\}"
 
 clean:
 	cargo clean

@@ -107,10 +107,6 @@ fn main() -> Result<(), Error> {
     let pause_move = Duration::from_secs(2);
 
     println!("--- Setup ---");
-    println!("Setting Work Mode to UART...");
-    send_command(&mut s, driver.set_work_mode(mks_servo42_rs::WorkMode::Uart))?;
-    thread::sleep(pause_short);
-    let _ = read_response(&mut s);
 
     println!(
         "Setting subdivision to {} (Microsteps: {})...",
