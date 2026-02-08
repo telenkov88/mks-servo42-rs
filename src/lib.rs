@@ -6,7 +6,6 @@
 
 #![no_std]
 
-// pub mod direction; (removed)
 pub mod enums;
 mod errors;
 pub mod helpers;
@@ -126,10 +125,6 @@ impl Driver {
     ///
     /// # Errors
     /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
-    /// Generates a command to run the motor at a constant speed.
-    ///
-    /// # Errors
-    /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
     pub fn run_with_constant_speed(
         &mut self,
         direction: RotationDirection,
@@ -158,10 +153,6 @@ impl Driver {
         self.build_command(&[self.address, cmd::SAVE_CLEAR_STATUS, operation as u8])
     }
 
-    /// Generates a command to move the motor to a specific position (relative pulses).
-    ///
-    /// # Errors
-    /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
     /// Generates a command to move the motor to a specific position (relative pulses).
     ///
     /// # Errors
