@@ -215,6 +215,38 @@ pub fn parse_en_pin_status_response(data: &[u8]) -> Result<EnPinStatus, Error> {
     Err(Error::InvalidPacket)
 }
 
+/// Parses the motor shaft status response.
+///
+/// This function parses responses from the `READ_SHAFT_STATUS` command (0x3E).
+/// The response format is: `[slave_address, status_byte, crc]`
+/// where status is:
+/// - 0x01: Blocked
+/// - 0x02: Unblocked
+/// - 0x00: Error
+pub fn parse_shaft_status_response(data: &[u8]) -> Result<crate::enums::ShaftStatus, Error> {
+    let mut idx = 0;
+    while idx < data.len() {
+        if data[idx] >= crate::MIN_ADDRESS
+            && data[idx] <= crate::MAX_ADDRESS
+            && idx + 2 < data.len()
+        {
+            let sum: u32 = data[idx..idx + 2].iter().map(|&b| u32::from(b)).sum();
+            if (sum as u8) == data[idx + 2] {
+                let status_byte = data[idx + 1];
+                return match status_byte {
+                    0x01 => Ok(crate::enums::ShaftStatus::Blocked),
+                    0x02 => Ok(crate::enums::ShaftStatus::Unblocked),
+                    0x00 => Ok(crate::enums::ShaftStatus::Error),
+                    _ => Err(Error::InvalidPacket),
+                };
+            }
+        }
+        idx += 1;
+    }
+
+    Err(Error::InvalidPacket)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -469,5 +501,26 @@ mod tests {
         let data = [0xDF, 0x01, 0xE0];
         let res = parse_en_pin_status_response(&data);
         assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_shaft_status_response() {
+        // Test Blocked
+        // Checksum: 0xE0 + 0x01 = 0xE1
+        let data = [0xE0, 0x01, 0xE1];
+        let status = parse_shaft_status_response(&data).unwrap();
+        assert_eq!(status, crate::enums::ShaftStatus::Blocked);
+
+        // Test Unblocked
+        // Checksum: 0xE0 + 0x02 = 0xE2
+        let data = [0xE0, 0x02, 0xE2];
+        let status = parse_shaft_status_response(&data).unwrap();
+        assert_eq!(status, crate::enums::ShaftStatus::Unblocked);
+
+        // Test Error
+        // Checksum: 0xE0 + 0x00 = 0xE0
+        let data = [0xE0, 0x00, 0xE0];
+        let status = parse_shaft_status_response(&data).unwrap();
+        assert_eq!(status, crate::enums::ShaftStatus::Error);
     }
 }

@@ -71,3 +71,15 @@ pub enum SaveClearStatus {
     /// Clear the saved status.
     Clear = 0xCA,
 }
+
+/// Motor shaft status.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ShaftStatus {
+    /// Motor is blocked (resistance detected).
+    Blocked = 0x01,
+    /// Motor is unblocked (running freely).
+    Unblocked = 0x02,
+    /// Error reading status.
+    Error = 0x00,
+}

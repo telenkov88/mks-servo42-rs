@@ -12,12 +12,12 @@ mod errors;
 pub mod helpers;
 pub mod response;
 
-pub use enums::{BaudRate, EnLogic, MotorType, SaveClearStatus, WorkMode, ZeroMode};
+pub use enums::{BaudRate, EnLogic, MotorType, SaveClearStatus, ShaftStatus, WorkMode, ZeroMode};
 pub use errors::Error;
 pub use helpers::{
     angle_to_steps, encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
-    parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, EnPinStatus, EncoderValue,
-    MotorShaftAngle, ShaftErrValue,
+    parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, parse_shaft_status_response,
+    EnPinStatus, EncoderValue, MotorShaftAngle, ShaftErrValue,
 };
 pub use response::{InvalidResponse, Response};
 
@@ -52,8 +52,7 @@ mod cmd {
     pub const READ_MOTOR_SHAFT_ANGLE_ERROR: u8 = 0x39;
     pub const READ_EN_PIN_STATUS: u8 = 0x3A;
     pub const READ_RELEASE_STATUS: u8 = 0x3D;
-    pub const CHECK_PROTECTION: u8 = 0x3E;
-    pub const RESTORE_DEFAULTS: u8 = 0x3F;
+    pub const READ_SHAFT_STATUS: u8 = 0x3E;
     pub const SAVE_CLEAR_STATUS: u8 = 0xFF;
 
     pub const CALIBRATE_ENCODER: u8 = 0x80;
@@ -67,7 +66,6 @@ mod cmd {
     pub const SET_PROTECTION: u8 = 0x88;
     pub const SET_INTERPOLATION: u8 = 0x89;
     pub const SET_BAUD_RATE: u8 = 0x8A;
-    pub const SET_SLAVE_ADDR: u8 = 0x8B;
 
     pub const SET_ZERO_MODE: u8 = 0x90;
     pub const SET_CURRENT_AS_ZERO: u8 = 0x91;
@@ -240,17 +238,6 @@ impl Driver {
         self.build_command(&[self.address, cmd::SET_BAUD_RATE, rate as u8])
     }
 
-    /// Generates a command to change the motor's slave address.
-    ///
-    /// # Errors
-    /// Returns `Error::InvalidValue` if the address is not within the valid range.
-    pub fn set_slave_address(&mut self, addr: u8) -> Result<&[u8]> {
-        if !(MIN_ADDRESS..=MAX_ADDRESS).contains(&addr) {
-            return Err(Error::InvalidValue);
-        }
-        Ok(self.build_command(&[self.address, cmd::SET_SLAVE_ADDR, addr - MIN_ADDRESS]))
-    }
-
     /// Generates a command to set the return-to-zero mode.
     pub fn set_zero_mode(&mut self, mode: ZeroMode) -> &[u8] {
         self.build_command(&[self.address, cmd::SET_ZERO_MODE, mode as u8])
@@ -318,9 +305,9 @@ impl Driver {
         Ok(self.build_command(&[self.address, cmd::SET_MAX_TORQUE, bytes[0], bytes[1]]))
     }
 
-    /// Generates a command to query the current stall protection state.
-    pub fn query_protection_state(&mut self) -> &[u8] {
-        self.build_command(&[self.address, cmd::CHECK_PROTECTION])
+    /// Generates a command to read the motor shaft status (Blocked/Unblocked/Error).
+    pub fn read_shaft_status(&mut self) -> &[u8] {
+        self.build_command(&[self.address, cmd::READ_SHAFT_STATUS])
     }
 
     /// Generates a command to read the current encoder value.
@@ -359,11 +346,6 @@ impl Driver {
     /// Generates a command to read the release status of the motor.
     pub fn read_release_status(&mut self) -> &[u8] {
         self.build_command(&[self.address, cmd::READ_RELEASE_STATUS])
-    }
-
-    /// Generates a command to restore all settings to default.
-    pub fn restore_defaults(&mut self) -> &[u8] {
-        self.build_command(&[self.address, cmd::RESTORE_DEFAULTS])
     }
 
     fn build_command(&mut self, cmd: &[u8]) -> &[u8] {

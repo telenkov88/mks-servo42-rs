@@ -323,14 +323,14 @@ fn test_read_en_pin_status() -> TestResult<()> {
     Ok(())
 }
 
-/// Test reading protection state
+/// Test reading shaft status (previously protection state)
 #[test]
-fn test_read_protection_state() -> TestResult<()> {
+fn test_read_shaft_status() -> TestResult<()> {
     init_env();
 
     let _guard = TEST_MUTEX.lock().unwrap();
 
-    println!("=== Test: read_protection_state ===");
+    println!("=== Test: read_shaft_status ===");
 
     let mut ctx = TestContext::new()?;
     let guarded = AutoStopGuard { ctx: &mut ctx };
@@ -342,25 +342,21 @@ fn test_read_protection_state() -> TestResult<()> {
         .serial
         .send_only(guarded.ctx.driver.enable_motor(true))?;
 
-    // Read protection state
-    println!("Reading protection state...");
+    // Read shaft status
+    println!("Reading shaft status...");
     let response = guarded
         .ctx
         .serial
-        .send_and_read(guarded.ctx.driver.query_protection_state())?;
+        .send_and_read(guarded.ctx.driver.read_shaft_status())?;
 
     if !response.is_empty() {
-        println!("Protection state response: {:02x?}", response);
-        if response.len() >= 3 {
-            match response[1] {
-                0x01 => println!("Motor blocked"),
-                0x02 => println!("Motor unblocked"),
-                0x00 => println!("Error state"),
-                _ => println!("Unknown state: 0x{:02x}", response[1]),
-            }
+        println!("Shaft status response: {:02x?}", response);
+        match test_utils::parse_shaft_status_response(&response) {
+            Ok(status) => println!("Shaft status: {:?}", status),
+            Err(e) => println!("Failed to parse shaft status: {:?}", e),
         }
     } else {
-        println!("No protection state response received");
+        println!("No shaft status response received");
     }
 
     println!("Test passed!");

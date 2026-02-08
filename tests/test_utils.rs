@@ -270,6 +270,15 @@ pub fn parse_en_pin_status_response(data: &[u8]) -> TestResult<mks_servo42_rs::E
     }
 }
 
+/// Helper to parse shaft status response
+#[allow(dead_code)]
+pub fn parse_shaft_status_response(data: &[u8]) -> TestResult<mks_servo42_rs::ShaftStatus> {
+    match mks_servo42_rs::parse_shaft_status_response(data) {
+        Ok(status) => Ok(status),
+        Err(e) => Err(TestError::Protocol(format!("Parse error: {:?}", e))),
+    }
+}
+
 /// Check if response indicates success
 #[allow(dead_code)]
 pub fn check_success_response(data: &[u8]) -> TestResult<bool> {
