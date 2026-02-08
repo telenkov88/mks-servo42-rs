@@ -12,7 +12,10 @@ mod errors;
 pub mod helpers;
 pub mod response;
 
-pub use enums::{BaudRate, EnLogic, MotorType, SaveClearStatus, ShaftStatus, WorkMode, ZeroMode};
+pub use enums::{
+    BaudRate, EnLogic, MotorType, RotationDirection, SaveClearStatus, ShaftStatus, WorkMode,
+    ZeroMode,
+};
 pub use errors::Error;
 pub use helpers::{
     angle_to_steps, encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
@@ -201,8 +204,8 @@ impl Driver {
     }
 
     /// Generates a command to set the motor direction polarity.
-    pub fn set_direction(&mut self, clockwise: bool) -> &[u8] {
-        self.build_command(&[self.address, cmd::SET_DIRECTION, u8::from(!clockwise)])
+    pub fn set_direction(&mut self, direction: RotationDirection) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_DIRECTION, direction as u8])
     }
 
     /// Generates a command to enable or disable automatic screen off.
@@ -247,8 +250,8 @@ impl Driver {
     }
 
     /// Generates a command to set the return-to-zero direction.
-    pub fn set_zero_direction(&mut self, clockwise: bool) -> &[u8] {
-        self.build_command(&[self.address, cmd::SET_ZERO_DIRECTION, u8::from(!clockwise)])
+    pub fn set_zero_direction(&mut self, direction: RotationDirection) -> &[u8] {
+        self.build_command(&[self.address, cmd::SET_ZERO_DIRECTION, direction as u8])
     }
 
     /// Generates a command to set the position loop Proportional (Kp) coefficient.

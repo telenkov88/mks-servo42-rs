@@ -83,3 +83,13 @@ pub enum ShaftStatus {
     /// Error reading status.
     Error = 0x00,
 }
+
+/// Rotation direction configuration.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum RotationDirection {
+    /// Clockwise rotation (CW).
+    Clockwise = 0x00,
+    /// Counter-clockwise rotation (CCW).
+    CounterClockwise = 0x01,
+}
