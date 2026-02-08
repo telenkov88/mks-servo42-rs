@@ -379,4 +379,80 @@ mod tests {
         let driver = Driver::default();
         assert_eq!(driver.address, DEFAULT_ADDRESS);
     }
+
+    #[test]
+    fn test_with_address() {
+        let driver = Driver::with_address(0xE5);
+        assert_eq!(driver.address, 0xE5);
+
+        // Test edge addresses
+        let driver_min = Driver::with_address(MIN_ADDRESS);
+        assert_eq!(driver_min.address, MIN_ADDRESS);
+
+        let driver_max = Driver::with_address(MAX_ADDRESS);
+        assert_eq!(driver_max.address, MAX_ADDRESS);
+    }
+
+    #[test]
+    fn test_set_subdivision_invalid_value() {
+        let mut driver = Driver::default();
+        // MAX_SUBDIVISION_INDEX is 0x08, so 0x09 should fail
+        let result = driver.set_subdivision(MAX_SUBDIVISION_INDEX + 1);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+
+        // Valid value should succeed
+        let result = driver.set_subdivision(MAX_SUBDIVISION_INDEX);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_set_current_limit_invalid_value() {
+        let mut driver = Driver::default();
+        // MAX_CURRENT_INDEX is 0x0F, so 0x10 should fail
+        let result = driver.set_current_limit(MAX_CURRENT_INDEX + 1);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+
+        // Valid value should succeed
+        let result = driver.set_current_limit(MAX_CURRENT_INDEX);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_motor_invalid_speed() {
+        let mut driver = Driver::default();
+        // MAX_SPEED is 0x7F, so 0x80 should fail
+        let result = driver.run_motor(RotationDirection::Clockwise, MAX_SPEED + 1, 100);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+
+        // Valid speed should succeed
+        let result = driver.run_motor(RotationDirection::Clockwise, MAX_SPEED, 100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_run_with_constant_speed_invalid_speed() {
+        let mut driver = Driver::default();
+        // MAX_SPEED is 0x7F, so 0x80 should fail
+        let result = driver.run_with_constant_speed(RotationDirection::Clockwise, MAX_SPEED + 1);
+        assert!(matches!(result, Err(Error::InvalidValue)));
+
+        // Valid speed should succeed
+        let result = driver.run_with_constant_speed(RotationDirection::Clockwise, MAX_SPEED);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_calibrate_encoder() {
+        // This command is too slow (40-60s) and dangerous to test on real hardware
+        let mut driver = Driver::default();
+        let cmd = driver.calibrate_encoder();
+
+        // Verify command format: [address, cmd::CALIBRATE_ENCODER, 0x00, checksum]
+        assert_eq!(cmd.len(), 4);
+        assert_eq!(cmd[0], DEFAULT_ADDRESS);
+        assert_eq!(cmd[1], 0x80); // cmd::CALIBRATE_ENCODER
+        assert_eq!(cmd[2], 0x00);
+        // Checksum: 0xE0 + 0x80 + 0x00 = 0x160 -> low byte 0x60
+        assert_eq!(cmd[3], 0x60);
+    }
 }
