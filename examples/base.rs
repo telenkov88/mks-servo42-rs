@@ -150,7 +150,7 @@ fn main() -> Result<(), Error> {
 
     send_command(
         &mut s,
-        driver.run_position(mks_servo42_rs::direction::Direction::Forward, 1, pulses)?,
+        driver.run_motor(mks_servo42_rs::RotationDirection::Clockwise, 1, pulses)?,
     )?;
 
     thread::sleep(pause_move);
@@ -224,7 +224,11 @@ fn main() -> Result<(), Error> {
 
     send_command(
         &mut s,
-        driver.run_position(mks_servo42_rs::direction::Direction::Reverse, 1, pulses)?,
+        driver.run_motor(
+            mks_servo42_rs::RotationDirection::CounterClockwise,
+            1,
+            pulses,
+        )?,
     )?;
 
     thread::sleep(pause_move);

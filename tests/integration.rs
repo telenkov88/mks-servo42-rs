@@ -8,7 +8,7 @@
 mod safety;
 mod test_utils;
 
-use mks_servo42_rs::direction::Direction;
+// use mks_servo42_rs::direction::Direction; (removed)
 use mks_servo42_rs::{EnLogic, RotationDirection, SaveClearStatus, ZeroMode};
 use safety::{
     validate_safe_angle, validate_safe_speed, MAX_SAFE_ANGLE_DEGREES, MAX_SAFE_SPEED,
@@ -118,7 +118,7 @@ fn test_run_speed() -> TestResult<()> {
     let cmd = guarded
         .ctx
         .driver
-        .run_speed(Direction::Forward, MAX_SAFE_SPEED)?;
+        .run_with_constant_speed(RotationDirection::Clockwise, MAX_SAFE_SPEED)?;
     guarded.ctx.serial.send_only(cmd)?;
 
     // Let it run briefly
@@ -165,7 +165,7 @@ fn test_run_position() -> TestResult<()> {
     let cmd = guarded
         .ctx
         .driver
-        .run_position(Direction::Forward, MAX_SAFE_SPEED, pulses)?;
+        .run_motor(RotationDirection::Clockwise, MAX_SAFE_SPEED, pulses)?;
     guarded.ctx.serial.send_only(cmd)?;
 
     // Wait for movement

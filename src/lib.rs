@@ -6,7 +6,7 @@
 
 #![no_std]
 
-pub mod direction;
+// pub mod direction; (removed)
 pub mod enums;
 mod errors;
 pub mod helpers;
@@ -80,9 +80,9 @@ mod cmd {
     pub const SET_MAX_TORQUE: u8 = 0xA5;
 
     pub const ENABLE_MOTOR: u8 = 0xF3;
-    pub const RUN_SPEED: u8 = 0xF6;
+    pub const RUN_WITH_CONSTANT_SPEED: u8 = 0xF6;
     pub const STOP: u8 = 0xF7;
-    pub const RUN_POSITION: u8 = 0xFD;
+    pub const RUN_MOTOR: u8 = 0xFD;
 }
 
 /// Main driver for communicating with an MKS SERVO42 motor.
@@ -126,11 +126,23 @@ impl Driver {
     ///
     /// # Errors
     /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
-    pub fn run_speed(&mut self, direction: direction::Direction, speed: u8) -> Result<&[u8]> {
+    /// Generates a command to run the motor at a constant speed.
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
+    pub fn run_with_constant_speed(
+        &mut self,
+        direction: RotationDirection,
+        speed: u8,
+    ) -> Result<&[u8]> {
         if speed > MAX_SPEED {
             return Err(Error::InvalidValue);
         }
-        Ok(self.build_command(&[self.address, cmd::RUN_SPEED, speed | direction as u8]))
+        let dir_mask = match direction {
+            RotationDirection::Clockwise => 0x00,
+            RotationDirection::CounterClockwise => 0x80,
+        };
+        Ok(self.build_command(&[self.address, cmd::RUN_WITH_CONSTANT_SPEED, speed | dir_mask]))
     }
 
     /// Generates a command to stop the motor immediately.
@@ -150,20 +162,28 @@ impl Driver {
     ///
     /// # Errors
     /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
-    pub fn run_position(
+    /// Generates a command to move the motor to a specific position (relative pulses).
+    ///
+    /// # Errors
+    /// Returns `Error::InvalidValue` if speed exceeds `MAX_SPEED`.
+    pub fn run_motor(
         &mut self,
-        direction: direction::Direction,
+        direction: RotationDirection,
         speed: u8,
         pulses: u32,
     ) -> Result<&[u8]> {
         if speed > MAX_SPEED {
             return Err(Error::InvalidValue);
         }
+        let dir_mask = match direction {
+            RotationDirection::Clockwise => 0x00,
+            RotationDirection::CounterClockwise => 0x80,
+        };
         let pulse_bytes = pulses.to_be_bytes();
         Ok(self.build_command(&[
             self.address,
-            cmd::RUN_POSITION,
-            speed | direction as u8,
+            cmd::RUN_MOTOR,
+            speed | dir_mask,
             pulse_bytes[0],
             pulse_bytes[1],
             pulse_bytes[2],
