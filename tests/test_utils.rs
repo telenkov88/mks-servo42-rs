@@ -114,21 +114,59 @@ impl TestSerialPort {
         Ok(Self { port: boxed_port })
     }
 
+    /// Clear input buffer logic
+    pub fn clear_input_buffer(&mut self) -> TestResult<()> {
+        self.port.set_timeout(Duration::from_millis(50))?;
+        let mut buffer = [0u8; 1024];
+        loop {
+            match self.port.read(&mut buffer) {
+                Ok(n) if n > 0 => {
+                    println!("Drained {} bytes: {:02x?}", n, &buffer[..n]);
+                }
+                _ => break,
+            }
+        }
+        self.port.set_timeout(DEFAULT_TIMEOUT)?;
+        Ok(())
+    }
+
     /// Send command and log it
     pub fn send_command(&mut self, command: &[u8]) -> TestResult<()> {
+        // Drain any pending bytes before sending new command
+        self.clear_input_buffer()?;
         println!("TX: {:02x?}", command);
         self.port.write_all(command)?;
         Ok(())
     }
 
-    /// Read response with timeout handling
+    /// Read response with timeout handling and robustness
     pub fn read_response(&mut self) -> TestResult<Vec<u8>> {
         let mut buffer = [0u8; 256];
         match self.port.read(&mut buffer) {
             Ok(n) if n > 0 => {
-                let response = buffer[..n].to_vec();
-                println!("RX: {:02x?}", response);
-                Ok(response)
+                let raw_response = buffer[..n].to_vec();
+                println!("RX Raw: {:02x?}", raw_response);
+
+                // Find start of valid frame (0xE0..0xE9 are valid addresses)
+                // This accounts for leading garbage.
+                if let Some(start_idx) = raw_response
+                    .iter()
+                    .position(|&b| (0xE0..=0xE9).contains(&b))
+                {
+                    let response = raw_response[start_idx..].to_vec();
+                    if start_idx > 0 {
+                        println!(
+                            "RX Cleaned (stripped {} bytes): {:02x?}",
+                            start_idx, response
+                        );
+                    } else {
+                        println!("RX Clean: {:02x?}", response);
+                    }
+                    Ok(response)
+                } else {
+                    println!("RX (No Header): {:02x?}", raw_response);
+                    Ok(raw_response)
+                }
             }
             Ok(_) => {
                 println!("RX: (empty)");

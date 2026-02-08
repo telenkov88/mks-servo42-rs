@@ -13,8 +13,40 @@ use safety::{
     validate_safe_angle, validate_safe_speed, MAX_SAFE_ANGLE_DEGREES, MAX_SAFE_SPEED,
     SAFE_MICROSTEPS,
 };
+use std::ops::{Deref, DerefMut};
 use std::time::Duration;
-use test_utils::{init_env, TestContext, TestResult, LONG_PAUSE, TEST_MUTEX};
+use test_utils::{init_env, TestContext, TestError, TestResult, LONG_PAUSE, TEST_MUTEX};
+
+/// Guard to ensure motor is stopped even if test panics or fails
+struct AutoStopGuard<'a> {
+    pub ctx: &'a mut TestContext,
+}
+
+impl<'a> Drop for AutoStopGuard<'a> {
+    fn drop(&mut self) {
+        println!("AutoStopGuard: Stopping and disabling motor...");
+        // Try to stop
+        let _ = self.ctx.serial.send_only(self.ctx.driver.stop());
+        // Try to disable
+        let _ = self
+            .ctx
+            .serial
+            .send_only(self.ctx.driver.enable_motor(false));
+    }
+}
+
+impl<'a> Deref for AutoStopGuard<'a> {
+    type Target = TestContext;
+    fn deref(&self) -> &Self::Target {
+        self.ctx
+    }
+}
+
+impl<'a> DerefMut for AutoStopGuard<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ctx
+    }
+}
 
 /// Test basic motor enable/disable
 #[test]
@@ -24,10 +56,14 @@ fn test_motor_enable_disable() -> TestResult<()> {
     println!("=== Test: motor enable/disable ===");
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor
     println!("Enabling motor...");
-    let response = ctx.serial.send_and_read(ctx.driver.enable_motor(true))?;
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.enable_motor(true))?;
 
     if response.len() >= 3 && response[1] == 0x01 {
         println!("Motor enabled successfully");
@@ -40,7 +76,10 @@ fn test_motor_enable_disable() -> TestResult<()> {
 
     // Disable motor
     println!("Disabling motor...");
-    let response = ctx.serial.send_and_read(ctx.driver.enable_motor(false))?;
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.enable_motor(false))?;
 
     if response.len() >= 3 && response[1] == 0x01 {
         println!("Motor disabled successfully");
@@ -63,27 +102,31 @@ fn test_run_speed() -> TestResult<()> {
     validate_safe_speed(MAX_SAFE_SPEED)?;
 
     let mut ctx = TestContext::new()?;
+    // Use the guard to ensure stop is called
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Run forward at minimal speed
     println!("Running forward at speed {}...", MAX_SAFE_SPEED);
-    let cmd = ctx.driver.run_speed(Direction::Forward, MAX_SAFE_SPEED)?;
-    ctx.serial.send_only(cmd)?;
+    let cmd = guarded
+        .ctx
+        .driver
+        .run_speed(Direction::Forward, MAX_SAFE_SPEED)?;
+    guarded.ctx.serial.send_only(cmd)?;
 
     // Let it run briefly
     println!("Running for 500ms...");
     std::thread::sleep(Duration::from_millis(500));
 
-    // Stop
+    // Stop is handled by guard on drop or we can explicitly call it
     println!("Stopping...");
-    ctx.serial.send_only(ctx.driver.stop())?;
-
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
+    guarded.ctx.serial.send_only(guarded.ctx.driver.stop())?;
 
     println!("Test passed!");
     Ok(())
@@ -101,10 +144,14 @@ fn test_run_position() -> TestResult<()> {
     validate_safe_angle(MAX_SAFE_ANGLE_DEGREES)?;
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Calculate pulses for safe angle
     let pulses = mks_servo42_rs::angle_to_steps(MAX_SAFE_ANGLE_DEGREES, SAFE_MICROSTEPS);
@@ -114,21 +161,18 @@ fn test_run_position() -> TestResult<()> {
     );
 
     // Move
-    let cmd = ctx
+    let cmd = guarded
+        .ctx
         .driver
         .run_position(Direction::Forward, MAX_SAFE_SPEED, pulses)?;
-    ctx.serial.send_only(cmd)?;
+    guarded.ctx.serial.send_only(cmd)?;
 
     // Wait for movement
     println!("Waiting for movement...");
     std::thread::sleep(LONG_PAUSE);
 
     // Stop
-    ctx.serial.send_only(ctx.driver.stop())?;
-
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
+    guarded.ctx.serial.send_only(guarded.ctx.driver.stop())?;
 
     println!("Test passed!");
     Ok(())
@@ -144,14 +188,21 @@ fn test_read_encoder() -> TestResult<()> {
     println!("=== Test: read_encoder ===");
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor first
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Read encoder
     println!("Reading encoder value...");
-    let response = ctx.serial.send_and_read(ctx.driver.read_encoder_value())?;
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.read_encoder_value())?;
 
     if !response.is_empty() {
         match test_utils::parse_encoder_response(&response) {
@@ -161,10 +212,6 @@ fn test_read_encoder() -> TestResult<()> {
     } else {
         println!("No encoder response received");
     }
-
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
 
     println!("Test passed!");
     Ok(())
@@ -180,16 +227,21 @@ fn test_read_motor_shaft_angle() -> TestResult<()> {
     println!("=== Test: read_motor_shaft_angle ===");
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor first
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Read motor shaft angle
     println!("Reading motor shaft angle...");
-    let response = ctx
+    let response = guarded
+        .ctx
         .serial
-        .send_and_read(ctx.driver.read_motor_shaft_angle())?;
+        .send_and_read(guarded.ctx.driver.read_motor_shaft_angle())?;
 
     if !response.is_empty() {
         match test_utils::parse_motor_shaft_angle_response(&response) {
@@ -199,10 +251,6 @@ fn test_read_motor_shaft_angle() -> TestResult<()> {
     } else {
         println!("No motor shaft angle response received");
     }
-
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
 
     println!("Test passed!");
     Ok(())
@@ -218,16 +266,21 @@ fn test_read_motor_shaft_angle_error() -> TestResult<()> {
     println!("=== Test: read_motor_shaft_angle_error ===");
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor first
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Read motor shaft angle error
     println!("Reading motor shaft angle error...");
-    let response = ctx
+    let response = guarded
+        .ctx
         .serial
-        .send_and_read(ctx.driver.read_motor_shaft_angle_error())?;
+        .send_and_read(guarded.ctx.driver.read_motor_shaft_angle_error())?;
 
     if !response.is_empty() {
         match test_utils::parse_motor_shaft_angle_error_response(&response) {
@@ -237,10 +290,6 @@ fn test_read_motor_shaft_angle_error() -> TestResult<()> {
     } else {
         println!("No motor shaft angle error response received");
     }
-
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
 
     println!("Test passed!");
     Ok(())
@@ -284,16 +333,21 @@ fn test_read_protection_state() -> TestResult<()> {
     println!("=== Test: read_protection_state ===");
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor first
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Read protection state
     println!("Reading protection state...");
-    let response = ctx
+    let response = guarded
+        .ctx
         .serial
-        .send_and_read(ctx.driver.query_protection_state())?;
+        .send_and_read(guarded.ctx.driver.query_protection_state())?;
 
     if !response.is_empty() {
         println!("Protection state response: {:02x?}", response);
@@ -309,10 +363,6 @@ fn test_read_protection_state() -> TestResult<()> {
         println!("No protection state response received");
     }
 
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
-
     println!("Test passed!");
     Ok(())
 }
@@ -327,14 +377,21 @@ fn test_read_pulse_count() -> TestResult<()> {
     println!("=== Test: read_pulse_count ===");
 
     let mut ctx = TestContext::new()?;
+    let guarded = AutoStopGuard { ctx: &mut ctx };
 
     // Enable motor first
     println!("Enabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(true))?;
+    guarded
+        .ctx
+        .serial
+        .send_only(guarded.ctx.driver.enable_motor(true))?;
 
     // Read pulse count
     println!("Reading pulse count...");
-    let response = ctx.serial.send_and_read(ctx.driver.read_pulse_count())?;
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.read_pulse_count())?;
 
     if !response.is_empty() {
         println!("Pulse count response: {:02x?}", response);
@@ -353,10 +410,6 @@ fn test_read_pulse_count() -> TestResult<()> {
     } else {
         println!("No pulse count response received");
     }
-
-    // Disable motor
-    println!("Disabling motor...");
-    ctx.serial.send_only(ctx.driver.enable_motor(false))?;
 
     println!("Test passed!");
     Ok(())
@@ -389,6 +442,87 @@ fn test_set_subdivision() -> TestResult<()> {
     }
 
     println!("Test passed!");
+    Ok(())
+}
+
+/// Test setting max torque safely
+#[test]
+fn test_set_max_torque() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: set_max_torque ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // Default 0x4B0 = 1200
+    let default_torque = 0x4B0;
+    println!("Setting max torque to default {}...", default_torque);
+
+    let cmd = ctx.driver.set_max_torque(default_torque);
+    let response = ctx.serial.send_and_read(cmd)?;
+
+    if !response.is_empty() && response.len() >= 3 {
+        if response[1] == 0x01 {
+            println!("Max torque set successfully");
+        } else {
+            println!("Failed to set max torque: response {:02x?}", response);
+            return Err(TestError::Protocol(format!(
+                "Failed to set max torque: {:?}",
+                response
+            )));
+        }
+    } else {
+        println!("No response for max torque setting");
+        return Err(TestError::Protocol(
+            "No response for max torque setting".into(),
+        ));
+    }
+
+    println!("Test passed!");
+    Ok(())
+}
+
+/// Test miscellaneous configuration commands that are safe
+#[test]
+fn test_misc_config() -> TestResult<()> {
+    init_env();
+    let _guard = TEST_MUTEX.lock().unwrap();
+
+    println!("=== Test: misc config ===");
+
+    let mut ctx = TestContext::new()?;
+
+    // set_auto_screen_off (0x87)
+    println!("Setting auto screen off (disable)...");
+    let cmd = ctx.driver.set_auto_screen_off(false);
+    let response = ctx.serial.send_and_read(cmd)?;
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Auto screen off disabled");
+    } else {
+        println!("Failed set_auto_screen_off: {:?}", response);
+    }
+
+    // set_stall_protection (0x88) - Enable
+    println!("Setting stall protection (enable)...");
+    let cmd = ctx.driver.set_stall_protection(true);
+    let response = ctx.serial.send_and_read(cmd)?;
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Stall protection enabled");
+    } else {
+        println!("Failed set_stall_protection: {:?}", response);
+    }
+
+    // set_interpolation (0x89) - Enable
+    println!("Setting interpolation (enable)...");
+    let cmd = ctx.driver.set_interpolation(true);
+    let response = ctx.serial.send_and_read(cmd)?;
+    if !response.is_empty() && response.len() >= 3 && response[1] == 0x01 {
+        println!("Interpolation enabled");
+    } else {
+        println!("Failed set_interpolation: {:?}", response);
+    }
+
     Ok(())
 }
 
