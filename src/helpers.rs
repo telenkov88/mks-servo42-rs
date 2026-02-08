@@ -224,26 +224,27 @@ pub fn parse_en_pin_status_response(data: &[u8]) -> Result<EnPinStatus, Error> {
 /// - 0x02: Unblocked
 /// - 0x00: Error
 pub fn parse_shaft_status_response(data: &[u8]) -> Result<crate::enums::ShaftStatus, Error> {
-    let mut idx = 0;
-    while idx < data.len() {
-        if data[idx] >= crate::MIN_ADDRESS
-            && data[idx] <= crate::MAX_ADDRESS
-            && idx + 2 < data.len()
-        {
-            let sum: u32 = data[idx..idx + 2].iter().map(|&b| u32::from(b)).sum();
-            if (sum as u8) == data[idx + 2] {
-                let status_byte = data[idx + 1];
-                return match status_byte {
-                    0x01 => Ok(crate::enums::ShaftStatus::Blocked),
-                    0x02 => Ok(crate::enums::ShaftStatus::Unblocked),
-                    0x00 => Ok(crate::enums::ShaftStatus::Error),
-                    _ => Err(Error::InvalidPacket),
-                };
-            }
-        }
-        idx += 1;
+    if data.len() < 3 {
+        return Err(Error::InvalidPacket);
     }
-
+    for window in data.windows(3) {
+        let addr = window[0];
+        if !(crate::MIN_ADDRESS..=crate::MAX_ADDRESS).contains(&addr) {
+            continue;
+        }
+        let status_byte = window[1];
+        let checksum = window[2];
+        let expected_checksum = addr.wrapping_add(status_byte);
+        if checksum != expected_checksum {
+            continue;
+        }
+        return match status_byte {
+            0x01 => Ok(crate::enums::ShaftStatus::Blocked),
+            0x02 => Ok(crate::enums::ShaftStatus::Unblocked),
+            0x00 => Ok(crate::enums::ShaftStatus::Error),
+            _ => Err(Error::InvalidPacket),
+        };
+    }
     Err(Error::InvalidPacket)
 }
 
@@ -522,5 +523,51 @@ mod tests {
         let data = [0xE0, 0x00, 0xE0];
         let status = parse_shaft_status_response(&data).unwrap();
         assert_eq!(status, crate::enums::ShaftStatus::Error);
+    }
+
+    #[test]
+    fn test_parse_shaft_status_response_too_short() {
+        // Packet too short (less than 3 bytes)
+        let data = [0xE0, 0x01];
+        let res = parse_shaft_status_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+
+        // Empty packet
+        let data: [u8; 0] = [];
+        let res = parse_shaft_status_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_shaft_status_response_invalid_checksum() {
+        // Wrong checksum
+        let data = [0xE0, 0x01, 0xE2];
+        let res = parse_shaft_status_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_shaft_status_response_invalid_address() {
+        // Invalid address (outside E0-E9 range)
+        let data = [0xDF, 0x01, 0xE0];
+        let res = parse_shaft_status_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_shaft_status_response_invalid_status() {
+        // Invalid status byte (0x03 is not valid)
+        // Checksum: 0xE0 + 0x03 = 0xE3
+        let data = [0xE0, 0x03, 0xE3];
+        let res = parse_shaft_status_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_shaft_status_response_with_prefix() {
+        // Test with garbage bytes before valid packet
+        let data = [0xFF, 0xFE, 0xE0, 0x01, 0xE1];
+        let status = parse_shaft_status_response(&data).unwrap();
+        assert_eq!(status, crate::enums::ShaftStatus::Blocked);
     }
 }

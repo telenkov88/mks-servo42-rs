@@ -28,7 +28,7 @@ pub const DEFAULT_BAUD_RATE: serial::BaudRate = serial::Baud38400;
 pub const DEFAULT_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// Short pause between commands
-pub const SHORT_PAUSE: Duration = Duration::from_millis(100);
+pub const SHORT_PAUSE: Duration = Duration::from_millis(200);
 
 /// Long pause for movement operations
 pub const LONG_PAUSE: Duration = Duration::from_secs(2);
@@ -199,6 +199,17 @@ impl TestSerialPort {
 
     /// Send command and read response with pause
     pub fn send_and_read(&mut self, command: &[u8]) -> TestResult<Vec<u8>> {
+        // Quick drain of any stale RX data before sending
+        self.port.set_timeout(Duration::from_millis(20))?;
+        let mut drain_buf = [0u8; 64];
+        while let Ok(n) = self.port.read(&mut drain_buf) {
+            if n == 0 {
+                break;
+            }
+            println!("Pre-TX drain: {:02x?}", &drain_buf[..n]);
+        }
+        self.port.set_timeout(DEFAULT_TIMEOUT)?;
+
         self.send_command(command)?;
         thread::sleep(SHORT_PAUSE);
         self.read_response()
