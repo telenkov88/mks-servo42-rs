@@ -168,14 +168,24 @@ fn test_run_motor() -> TestResult<()> {
         .serial
         .send_only(guarded.ctx.driver.enable_motor(true))?;
 
+    // Read initial angle
+    println!("Reading initial encoder value...");
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.read_encoder_value())?;
+    let initial_angle = test_utils::parse_encoder_response(&response)
+        .map_err(|e| TestError::Protocol(format!("Failed to parse initial encoder: {:?}", e)))?;
+    println!("Initial Angle: {:.2}°", initial_angle);
+
     // Calculate pulses for safe angle
     let pulses = mks_servo42_rs::angle_to_steps(MAX_SAFE_ANGLE_DEGREES, SAFE_MICROSTEPS);
     println!(
-        "Moving {}° forward ({} pulses)...",
+        "Moving {}° Clockwise ({} pulses)...",
         MAX_SAFE_ANGLE_DEGREES, pulses
     );
 
-    // Move
+    // Move CW
     let cmd = guarded
         .ctx
         .driver
@@ -185,6 +195,75 @@ fn test_run_motor() -> TestResult<()> {
     // Wait for movement
     println!("Waiting for movement...");
     std::thread::sleep(LONG_PAUSE);
+
+    // Read angle after CW
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.read_encoder_value())?;
+    let cw_angle = test_utils::parse_encoder_response(&response)
+        .map_err(|e| TestError::Protocol(format!("Failed to parse CW encoder: {:?}", e)))?;
+    println!("Angle after CW: {:.2}°", cw_angle);
+
+    // Verify CW movement
+    let delta_cw = cw_angle - initial_angle;
+    println!("Delta CW: {:.2}°", delta_cw);
+
+    // Check if it moved approx 10 degrees.
+    // We allow some tolerance (e.g. 5 degrees) because of unknown initial state or tuning,
+    // but it MUST be non-zero significantly.
+    if delta_cw.abs() < 1.0 {
+        println!("Warning: Motor did not move enough CW? Delta: {}", delta_cw);
+        // Depending on STRICT mode, we might error. For now, strict.
+        return Err(TestError::Servo(format!(
+            "Motor did not move enough CW. Delta: {}",
+            delta_cw
+        )));
+    }
+
+    // Move CCW
+    println!(
+        "Moving {}° Counter-Clockwise ({} pulses)...",
+        MAX_SAFE_ANGLE_DEGREES, pulses
+    );
+    let cmd = guarded.ctx.driver.run_motor(
+        RotationDirection::CounterClockwise,
+        MAX_SAFE_SPEED,
+        pulses,
+    )?;
+    guarded.ctx.serial.send_only(cmd)?;
+
+    // Wait for movement
+    println!("Waiting for movement...");
+    std::thread::sleep(LONG_PAUSE);
+
+    // Read angle after CCW
+    let response = guarded
+        .ctx
+        .serial
+        .send_and_read(guarded.ctx.driver.read_encoder_value())?;
+    let final_angle = test_utils::parse_encoder_response(&response)
+        .map_err(|e| TestError::Protocol(format!("Failed to parse final encoder: {:?}", e)))?;
+    println!("Angle after CCW: {:.2}°", final_angle);
+
+    // Verify CCW movement (should be back to approx initial)
+    let delta_total = final_angle - initial_angle;
+    println!("Final Delta from Initial: {:.2}°", delta_total);
+
+    // Should be close to 0
+    if delta_total.abs() > 3.0 {
+        println!(
+            "Warning: Final angle not exactly initial. Delta: {}",
+            delta_total
+        );
+    }
+
+    // Additional check: angle should have moved BACK from CW data
+    let delta_return = final_angle - cw_angle;
+    println!("Delta Return: {:.2}°", delta_return);
+    if delta_return.abs() < 1.0 {
+        return Err(TestError::Servo("Motor did not move enough CCW".into()));
+    }
 
     // Stop
     guarded.ctx.serial.send_only(guarded.ctx.driver.stop())?;
