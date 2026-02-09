@@ -23,10 +23,23 @@ coverage:
 	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t cobertura --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" --excl-line "#\[test\]" --excl-start "mod tests \{" --excl-stop "^\}" -o target/coverage/cobertura.xml
 	grcov target/coverage --binary-path ./target/debug/deps/ -s . -t markdown --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" --excl-line "#\[test\]" --excl-start "mod tests \{" --excl-stop "^\}"
 
+doc:
+	cargo doc --no-deps --open
+
+check-publish:
+	cargo package --list
+	cargo package --verify
+
+publish-dry-run:
+	cargo publish --dry-run
+
+publish:
+	cargo publish
+
 clean:
 	cargo clean
 
 install-deps:
 	cargo install cargo-llvm-cov grcov
 
-.PHONY: build lint fmt test coverage clean install-deps
+.PHONY: build lint fmt test coverage doc check-publish publish-dry-run publish clean install-deps
