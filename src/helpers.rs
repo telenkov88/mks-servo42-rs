@@ -248,6 +248,52 @@ pub fn parse_shaft_status_response(data: &[u8]) -> Result<crate::enums::ShaftSta
     Err(Error::InvalidPacket)
 }
 
+/// Strips leading garbage bytes before the first valid address (0xE0-0xE9).
+///
+/// Serial responses sometimes have leading garbage bytes from previous commands.
+/// This function returns a slice starting from the first valid MKS SERVO42 address byte,
+/// or an empty slice if no valid address is found.
+///
+/// # Example
+/// ```
+/// use mks_servo42_rs::strip_leading_garbage;
+/// let data = [0x00, 0xFF, 0xE0, 0x01, 0xE1];
+/// let cleaned = strip_leading_garbage(&data);
+/// assert_eq!(cleaned, &[0xE0, 0x01, 0xE1]);
+/// ```
+#[must_use]
+pub fn strip_leading_garbage(data: &[u8]) -> &[u8] {
+    data.iter()
+        .position(|&b| (crate::MIN_ADDRESS..=crate::MAX_ADDRESS).contains(&b))
+        .map_or(&[], |idx| &data[idx..])
+}
+
+/// Parses standard success/failure response: `[address, status, checksum]`.
+///
+/// Most MKS SERVO42 commands return a simple 3-byte response indicating success (0x01)
+/// or failure (0x00). This function scans for a valid packet and returns the response.
+///
+/// # Errors
+/// Returns `Error::InvalidPacket` if no valid success/failure response is found.
+pub fn parse_success_response(data: &[u8]) -> Result<crate::Response, Error> {
+    if data.len() < 3 {
+        return Err(Error::InvalidPacket);
+    }
+    for window in data.windows(3) {
+        let addr = window[0];
+        if !(crate::MIN_ADDRESS..=crate::MAX_ADDRESS).contains(&addr) {
+            continue;
+        }
+        let status = window[1];
+        let checksum = window[2];
+        if checksum != addr.wrapping_add(status) {
+            continue;
+        }
+        return crate::Response::try_from(status).map_err(|_| Error::InvalidPacket);
+    }
+    Err(Error::InvalidPacket)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -569,5 +615,83 @@ mod tests {
         let data = [0xFF, 0xFE, 0xE0, 0x01, 0xE1];
         let status = parse_shaft_status_response(&data).unwrap();
         assert_eq!(status, crate::enums::ShaftStatus::Blocked);
+    }
+
+    #[test]
+    fn test_strip_leading_garbage() {
+        // Empty data
+        let data: [u8; 0] = [];
+        assert_eq!(strip_leading_garbage(&data), &[]);
+
+        // No valid address
+        let data = [0x00, 0xFF, 0xAA];
+        assert_eq!(strip_leading_garbage(&data), &[]);
+
+        // Valid address at start
+        let data = [0xE0, 0x01, 0xE1];
+        assert_eq!(strip_leading_garbage(&data), &[0xE0, 0x01, 0xE1]);
+
+        // Garbage before valid address
+        let data = [0x00, 0xFF, 0xE0, 0x01, 0xE1];
+        assert_eq!(strip_leading_garbage(&data), &[0xE0, 0x01, 0xE1]);
+
+        // Multiple valid addresses - returns from first
+        let data = [0x00, 0xE1, 0x01, 0xE2, 0xE0, 0x01, 0xE1];
+        assert_eq!(
+            strip_leading_garbage(&data),
+            &[0xE1, 0x01, 0xE2, 0xE0, 0x01, 0xE1]
+        );
+    }
+
+    #[test]
+    fn test_parse_success_response() {
+        // Success response
+        // Checksum: 0xE0 + 0x01 = 0xE1
+        let data = [0xE0, 0x01, 0xE1];
+        let res = parse_success_response(&data).unwrap();
+        assert!(matches!(res, crate::Response::Success));
+
+        // Failure response
+        // Checksum: 0xE0 + 0x00 = 0xE0
+        let data = [0xE0, 0x00, 0xE0];
+        let res = parse_success_response(&data).unwrap();
+        assert!(matches!(res, crate::Response::Failure));
+
+        // With garbage prefix
+        let data = [0xFF, 0x00, 0xE0, 0x01, 0xE1];
+        let res = parse_success_response(&data).unwrap();
+        assert!(matches!(res, crate::Response::Success));
+    }
+
+    #[test]
+    fn test_parse_success_response_invalid() {
+        // Too short
+        let data = [0xE0, 0x01];
+        assert!(matches!(
+            parse_success_response(&data),
+            Err(Error::InvalidPacket)
+        ));
+
+        // Invalid checksum
+        let data = [0xE0, 0x01, 0xE2];
+        assert!(matches!(
+            parse_success_response(&data),
+            Err(Error::InvalidPacket)
+        ));
+
+        // Invalid address
+        let data = [0xDF, 0x01, 0xE0];
+        assert!(matches!(
+            parse_success_response(&data),
+            Err(Error::InvalidPacket)
+        ));
+
+        // Invalid status (not 0x00 or 0x01)
+        // Checksum: 0xE0 + 0x02 = 0xE2
+        let data = [0xE0, 0x02, 0xE2];
+        assert!(matches!(
+            parse_success_response(&data),
+            Err(Error::InvalidPacket)
+        ));
     }
 }

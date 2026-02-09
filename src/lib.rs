@@ -19,7 +19,8 @@ pub use errors::Error;
 pub use helpers::{
     angle_to_steps, encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
     parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, parse_shaft_status_response,
-    EnPinStatus, EncoderValue, MotorShaftAngle, ShaftErrValue,
+    parse_success_response, strip_leading_garbage, EnPinStatus, EncoderValue, MotorShaftAngle,
+    ShaftErrValue,
 };
 pub use response::{InvalidResponse, Response};
 
