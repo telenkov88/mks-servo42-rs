@@ -28,7 +28,7 @@ doc:
 
 check-publish:
 	cargo package --list
-	cargo package --verify
+	cargo package
 
 publish-dry-run:
 	cargo publish --dry-run
