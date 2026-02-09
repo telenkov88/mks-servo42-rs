@@ -18,7 +18,7 @@ use std::time::Duration;
 const MICROSTEPS: u8 = 4;
 
 fn main() {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
 
     // Get serial port from environment
     let port_path = env::var("MKS_ENV_SERVO42C_UART")
