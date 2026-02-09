@@ -1,0 +1,810 @@
+Applicable to MKS-SERVO42C-V1.1
+Note: Please set the serial port ID first.(default:e0) The default ID for the following chapters is e0.
+
+Read parameter command
+command 1 : e0 30 tCHK
+
+read the encoder value (the motor should be calibrated)
+
+Return e0, encoder value(uint16_t), rCHK. The returned value ranges from 0 to FFFF.
+
+Example:
+
+Send e0 30 10
+
+return e0 40 00 20
+
+command 2 : e0 33 tCHK
+
+Read the number of pulses received
+
+Return e0, number pulses(int32_t),rCHK.
+
+Example:
+
+Send e0 33 13
+
+return e0 00 00 01 00 e1 (256 pulses)
+
+command 3 : e0 36 tCHK
+
+read the angle of the motor shaft.
+
+Return e0 , angle(int32_t),rCHK.
+
+The motor rotates one circle, the corresponding angle value range is 0~65535.
+
+Example:
+
+Send e0 36 16
+
+return e0 00 00 40 00 20 (angle 90 °)
+
+command 4: e0 39 tCHK
+
+read the error of the motor shaft angle.
+
+Return e0, error(int16_t), rCHK.
+
+The error is the difference between the angle you want to control minus the real-time angle of the motor, 0-FFFF corresponds to 0~360°, for example, when the angle error is 1°, the return error is 65536/360= 182.444, and so on.
+
+Example:
+
+Send e0 39 19
+
+return e0 00 B7 97 (error 1 °)
+
+command 5: e0 3a tCHK
+
+read the En pins status.
+
+Return e0, status (uint8_t), rCHK.
+
+Status:
+
+01-enable;
+
+02-disable;
+
+00-error
+
+Example:
+
+Send e0 3a 1a
+
+return e0 01 e1 (enable)
+
+command 6: e0 3e tCHK
+
+read the motor shaft status.
+
+Return e0, status (uint8_t), rCHK.
+
+Status:
+
+01-blocked;
+
+02- unblocked;
+
+00-error
+
+Example:
+
+Send e0 3e 1e
+
+return e0 02 e2 (unblocked)
+
+Set system parameter command
+Calibrate the encoder （Same as the "Cal" option on screen）
+
+command7 : e0 80 00 tCHK
+
+(The motor must be unloaded.)
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send “e0 80 00 60”
+
+return "e0 01 e1" (succeessful)
+
+Set the motor type （Same as the " MotType " option on screen）
+
+Command8 : e0 81 xx tCHK
+
+xx :
+
+00-0.9° motor;
+
+01-1.8° motor
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 81 01 62" (1.8 degree motor)
+
+return "e0 01 e1" (successful)
+
+Set the work mode （Same as the " CtrMode " option on screen）
+
+Command9 : e0 82 xx tCHK
+
+xx :
+
+00-CR_OPEN;(Open loop mode)
+
+01-CR_vFOC;(Closed loop mode (STP/DIR interface))
+
+02-CR_UART(Closed loop mode (UART interface))
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 82 01 63" (CR_vFOC)
+
+return "e0 01 e1" (successful)
+
+Set the current gear （Same as the " Ma " option on screen）
+
+Command10 : e0 83 xx tCHK
+
+XX:
+
+00-0Ma
+
+01-200Ma
+
+02-400Ma
+
+...
+
+0c-2400Ma
+
+Return e0 and the result (uint8_t) and rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example:
+
+Send e0 83 06 69 (1200ma)
+
+return e0 01 e1 (successful)
+
+Set subdivision （Same as the " MStep " option on screen）
+
+Command11 : e0 84 xx tCHK
+
+Set subdivision from 1 to 256, the value will show in the screen of MStep option.
+
+For example:
+
+Send “e0 84 07 6b”，set 7 subdivision
+
+Send “e0 84 4e b2”，set 78 subdivision
+
+Send “e0 84 00 64”，set 256 subdivision
+
+And so on...
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example:
+
+Send e0 84 1a 7e (26 subdivision)
+
+return e0 01 e1 (successful)
+
+Set the active of the En pin （Same as the " En " option on screen）
+
+Command12 : e0 85 xx tCHK
+
+xx :
+
+00-active low (L);
+
+01-active high (H);
+
+02-active always (Hold)
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 85 00 65" (active low)
+
+return "e0 01 e1" (successful)
+
+Set the direction of motor rotation（Same as the " Dir " option on screen）
+
+Command13 : e0 86 xx tCHK
+
+xx :
+
+00-CW;
+
+01-CCW
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 86 00 66" (CW)
+
+return "e0 01 e1" (successful)
+
+Set automatic turn off the screen（Same as the " AutoSDD " option on screen）
+
+Command14 : e0 87 xx tCHK
+
+xx :
+
+00-disable;
+
+01-Enable
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 87 00 67" (disable)
+
+return "e0 01 e1" (successful)
+
+Set the stall protection（Same as the " Protect " option on screen）
+
+Command15 : e0 88 xx tCHK
+
+00-Disable
+
+01-Enable
+
+Return e0 and the result (uint8_t) and rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example:
+
+Send e0 88 00 68 (Disable)
+
+return e0 01 e1 (successful)
+
+Set the subdivision interpolation function（Same as the " MPlyer " option on screen）
+
+Command16 : e0 89 xx tCHK
+
+xx :
+
+00-disable;
+
+01-Enable
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 89 00 69" (Disable)
+
+return "e0 01 e1" (successful)
+
+Set the baud rate（Same as the " UartBaud " option on screen）
+
+Command17 : e0 8a xx tCHK
+
+xx :
+
+01-9600;
+
+02-19200;
+
+03-25000;
+
+04-38400;
+
+05-57600;
+
+06-115200.
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 8a 04 6e" (38400)
+
+return "e0 01 e1" (successful)
+
+Set the uart address（Same as the " UartAddr " option on screen）
+
+Command18 : e0 8b xx tCHK
+
+xx :
+
+00-e0;
+
+01-e1;
+
+...
+
+09-e9
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 8b 02 6d" (e2)
+
+return "e0 01 e1" (successful)
+
+Set zeroMode parameters command
+Set the mode of zeroMode（Same as the " 0_Mode " option on screen）
+
+Command19 : e0 90 xx tCHK
+
+xx :
+
+00-Disable;
+
+01-DirMode;
+
+02-NearMode
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 90 01 71" (DirMode)
+
+return "e0 01 e1" (successful)
+
+Set the zero of zeroMode（Same as the " Set 0 " option on screen）
+
+Command20 : e0 91 xx tCHK
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 91 00 71"
+
+return "e0 01 e1" (successful)
+
+Note: The mode of "0_Mode" needs to be set first.
+
+Set the speed of zeroMode（Same as the " 0_Speed " option on screen）
+
+Command21 : e0 92 xx tCHK
+
+(Range 0~4, the smaller the value, the faster the speed)
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 92 01 72"
+
+return "e0 01 e1" (successful)
+
+Note: The mode of "0_Mode" needs to be set first.
+
+Set the dir of zeroMode（Same as the " 0_Dir " option on screen）
+
+Command22 : e0 93 xx tCHK
+
+xx :
+
+00-CW;
+
+01-CCW
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 93 00 73" (CW)
+
+return "e0 01 e1" (successful)
+
+Note: For NearMode, the setting of 0_Dir should be consistent with the actual running direction of the motor, otherwise it will fail to return to zero.
+
+Return to zero（Same as the " Goto 0 " option on screen）
+
+Command23 : e0 94 00 tCHK
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 94 00 74"
+
+return "e0 01 e1" (successful)
+
+Set PID/ACC/Torque command
+Set the position Kp parameter
+
+command24: e0 a1 XX XX tCHK
+
+(Default 0x650).
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 a1 01 20 a2" (Kp = 0x120)
+
+return "e0 01 e1" (successful)
+
+Set the position Ki parameter
+
+command25: e0 a2 XX XX tCHK
+
+(Default 1).
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 a2 00 02 84" (Ki = 0x02)
+
+return "e0 01 e1" (successful)
+
+Set the position Kd parameter
+
+command26: e0 a3 XX XX tCHK
+
+(Default 0x650).
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 a3 02 50 d5" (Kd = 0x250)
+
+return "e0 01 e1" (successful)
+
+Important note: Changing the PID parameters may cause the motor to vibrate, please set the appropriate PID parameters.
+
+Set the acceleration (ACC) parameter
+
+command27: e0 a4 XX XX tCHK
+
+(Default 0x11e).
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 a4 00 80 04" (ACC = 0x80)
+
+return "e0 01 e1" (successful)
+
+Important note: If the ACC parameter is set too large, it may damage the driver board, please set the parameters carefully!
+
+Set the maximum torque (MaxT) parameter
+
+command28: e0 a5 XX XX tCHK
+
+MaxT value range (0 ~ 0x4B0). (Default 0x4B0)
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 a5 02 58 df" (MaxT = 0x258)
+
+return "e0 01 e1" (successful)
+
+Restore default parameter command
+command 29: e0 3f tCHK（Same as the " Restore" option on screen）
+
+Return e0 , result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example:
+
+Send "e0 3f 1f"
+
+return "e0 01 e1" (successful)
+
+Note: After restoring the default parameters, you need to power on again and reset the serial port baud rate before serial communication
+
+Serial control command
+command 30: e0 f3 xx tCHK
+
+Set the En pin status in CR_UART mode.
+
+status: 01-enable; 00-disable
+
+Return e0, result (uint8_t), rCHK .
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example:
+
+Send e0 f3 01 d4 (enable)
+
+return e0 01 e1 (successful)
+
+command 31: e0 f6 xx tCHK
+
+run the motor forward / reverse in a Constant speed.
+
+Such as:
+
+The XX highest bit indicates direction, and the XX lowest 7 bits indicate 128 speed gears, for example：
+
+
+
+The speed(Vrpm) calculation formula is:
+
+Vrpm = (speed × 30000)/(Mstep × 200)(RPM) 1.8°motor
+
+Vrpm = (speed × 30000)/(Mstep × 400)(RPM) 0.9°motor
+
+(Mstep is set by command8 or by the screen menu)
+
+For example:
+
+1.8 degree motor, Mstep = 150, Speed=1
+
+Vrpm = (1 × 30000)/(150 × 200) = 1
+
+Part of the speed is as follows:
+
+
+
+Such as:
+
+Send “e0 f6 01 d7”，The motor rotates forward at the speed of 1 gear；
+
+Send “e0 f6 81 57”，The motor reverses at the speed of 1 gear；
+
+Send “e0 f6 5a 30”，The motor rotates forward at the speed of 90 gear；
+
+Send “e0 f6 da b0”，The motor reverses at the speed of 90 gear；
+
+Return e0 ,result (uint8_t),rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example:
+
+Send e0 f6 10 e6 (speed of 16 gear)
+
+return e0 01 e1 (successful)
+
+command 32: e0 f7 tCHK
+
+stop the motor.
+
+Return e0 and the result (uint8_t) and rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example:
+
+Send e0 f7 d7
+
+return e0 01 e1 (successful)
+
+command 33: e0 ff xx tCHK
+
+Save/Clear the status set in command9.
+
+xx:
+
+c8-save;
+
+ca-clean
+
+Return e0, result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+Example: Send e0 ff c8 a7 (save the status)
+
+return e0 01 e1 (successful)
+
+Attention1：The motor can rotates clockwise or counterclockwise at a constant speed when powered on.
+
+Attention2: After the save is successful, the driver board will be disable, and it needs to be re-enabled.
+
+For example:
+
+Step1:
+
+Send e0 f6 10 e6
+
+return e0 01 e1
+
+Step2:
+
+Send e0 ff c8 a7
+
+return e0 01 e1
+
+the motor will always rotates clockwise in speed(16) when power on.
+
+command 34: e0 fd xx xx xx xx xx tCHK
+
+The motor run to an angle in a speed.
+
+The third byte(xx) defines the direction and speed, such as command 9.
+
+The last two bytes(xx xx xx xx ) define the number of pulses.
+
+If(xx xx xx xx = 00 00 0C 80),the motor(1.8 °, subdivision 16) will rotates one circle.
+
+
+
+The speed (Vrpm) calculation formula is the same as command10.
+
+Return e0, result (uint8_t), rCHK.
+
+result:
+
+01- successful;
+
+00- Failure
+
+For example: (the motor(1.8 °, subdivision 16))
+
+send “e0 fd 01 00 00 0c 80 6a”, the motor rotates forward 360 °in speed 1.
+
+send “e0 fd 86 00 00 0c 80 ef”, the motor rotates reverses 360 °in speed 6.
+
+Example:
+
+Send e0 fd 32 00 00 0c 80 9b
+
+return e0 01 e1 (successful)

@@ -1,271 +1,117 @@
-use dotenv::dotenv;
+//! Basic example demonstrating MKS SERVO42 motor control via UART.
+//!
+//! This example shows how to:
+//! - Connect to the motor via serial port
+//! - Configure microstepping
+//! - Move the motor to specific positions
+//! - Read encoder feedback
+//!
+//! Set the `MKS_ENV_SERVO42C_UART` environment variable to your serial port path.
+
+use mks_servo42_rs::{Driver, RotationDirection};
 use serial::{SerialPort, SerialPortSettings};
 use std::env;
-use std::fmt;
-use std::io::Error as IoError;
 use std::thread;
 use std::time::Duration;
 
-const SUBDIVISION_CODE: u8 = 4;
-const MICROSTEPS: f32 = 4.0; // Index 4/16 results in 4 microsteps/step
+/// Microstepping configuration (index 4 = 4 microsteps per step)
+const MICROSTEPS: u8 = 4;
 
-enum Error {
-    Servo(mks_servo42_rs::Error),
-    Io(IoError),
-    Serial(serial::Error),
-    Protocol(String),
-}
+fn main() {
+    dotenvy::dotenv().ok();
 
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Servo(servo) => write!(f, "Servo {{ {:?} }}", servo.as_str()),
-            Self::Io(io) => write!(f, "Io {{ {io:?} }}"),
-            Self::Serial(serial) => write!(f, "Serial {{ {serial:?} }}"),
-            Self::Protocol(msg) => write!(f, "Protocol {{ {msg} }}"),
-        }
-    }
-}
+    // Get serial port from environment
+    let port_path = env::var("MKS_ENV_SERVO42C_UART")
+        .expect("Set MKS_ENV_SERVO42C_UART to your serial port path");
 
-impl From<mks_servo42_rs::Error> for Error {
-    fn from(other: mks_servo42_rs::Error) -> Self {
-        Self::Servo(other)
-    }
-}
+    println!("Connecting to: {}", port_path);
 
-impl From<IoError> for Error {
-    fn from(other: IoError) -> Self {
-        Self::Io(other)
-    }
-}
-
-impl From<serial::Error> for Error {
-    fn from(other: serial::Error) -> Self {
-        Self::Serial(other)
-    }
-}
-
-fn send_command(s: &mut impl SerialPort, cmd: &[u8]) -> Result<(), Error> {
-    println!("TX: {cmd:02x?}");
-    s.write_all(cmd)?;
-    Ok(())
-}
-
-fn read_response(s: &mut impl SerialPort) -> Result<Vec<u8>, Error> {
-    let mut buf = [0u8; 256];
-    match s.read(&mut buf) {
-        Ok(n) if n > 0 => {
-            let response = buf[..n].to_vec();
-            println!("RX: {:02x?}", response);
-            Ok(response)
-        }
-        Ok(_) => {
-            println!("RX: (empty)");
-            Ok(Vec::new())
-        }
-        Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-            println!("RX: (timeout)");
-            Ok(Vec::new())
-        }
-        Err(e) => {
-            println!("RX Error: {e:?}");
-            Err(Error::Io(e))
-        }
-    }
-}
-
-fn parse_encoder(data: &[u8]) -> Result<f32, Error> {
-    match mks_servo42_rs::parse_encoder_response(data) {
-        Ok(encoder_value) => Ok(encoder_value.to_degrees()),
-        Err(e) => Err(Error::Protocol(format!("Parse error: {:?}", e.as_str()))),
-    }
-}
-
-fn main() -> Result<(), Error> {
-    dotenv().ok();
-
-    let mks_env_servo42c_uart = env::var("MKS_ENV_SERVO42C_UART")
-        .expect("MKS_ENV_SERVO42C_UART path to serial port must be set");
-
-    let mut driver = mks_servo42_rs::Driver::default();
-
-    println!("Connecting to serial port: {}", mks_env_servo42c_uart);
-    let mut s = serial::open(&mks_env_servo42c_uart)?;
-
-    s.reconfigure(&|port: &mut dyn SerialPortSettings| {
-        port.set_baud_rate(serial::Baud38400)?;
-        port.set_char_size(serial::Bits8);
-        port.set_parity(serial::ParityNone);
-        port.set_stop_bits(serial::Stop1);
-        port.set_flow_control(serial::FlowNone);
+    // Open and configure serial port
+    let mut port = serial::open(&port_path).expect("Failed to open serial port");
+    port.reconfigure(&|settings: &mut dyn SerialPortSettings| {
+        settings.set_baud_rate(serial::Baud38400)?;
+        settings.set_char_size(serial::Bits8);
+        settings.set_parity(serial::ParityNone);
+        settings.set_stop_bits(serial::Stop1);
+        settings.set_flow_control(serial::FlowNone);
         Ok(())
-    })?;
+    })
+    .expect("Failed to configure serial port");
+    port.set_timeout(Duration::from_millis(100)).unwrap();
 
-    s.set_timeout(Duration::from_millis(100))?;
+    let mut driver = Driver::default();
 
-    let pause_short = Duration::from_millis(500);
-    let pause_move = Duration::from_secs(2);
+    // === Setup ===
+    println!("\n=== Setup ===");
 
-    println!("--- Setup ---");
-    println!("Setting Work Mode to UART...");
-    send_command(&mut s, driver.set_work_mode(mks_servo42_rs::WorkMode::Uart))?;
-    thread::sleep(pause_short);
-    let _ = read_response(&mut s);
+    send(&mut port, driver.set_subdivision(MICROSTEPS).unwrap());
+    send(&mut port, driver.enable_motor(true));
 
-    println!(
-        "Setting subdivision to {} (Microsteps: {})...",
-        SUBDIVISION_CODE, MICROSTEPS
+    // Go to zero position
+    send(&mut port, driver.set_zero_speed(1).unwrap());
+    send(&mut port, driver.go_to_zero());
+    thread::sleep(Duration::from_secs(2));
+
+    // === Move 360° clockwise ===
+    println!("\n=== Move 360° Clockwise ===");
+
+    let start_angle = read_encoder(&mut port, &mut driver);
+    println!("Start: {:.1}°", start_angle);
+
+    let pulses = mks_servo42_rs::angle_to_steps(360.0, MICROSTEPS as f32);
+    send(
+        &mut port,
+        driver
+            .run_motor(RotationDirection::Clockwise, 1, pulses)
+            .unwrap(),
     );
-    send_command(&mut s, driver.set_subdivision(SUBDIVISION_CODE)?)?;
-    thread::sleep(pause_short);
-    let _ = read_response(&mut s);
+    thread::sleep(Duration::from_secs(3));
 
-    println!("Enabling Motor...");
-    send_command(&mut s, driver.enable_motor(true))?;
-    thread::sleep(pause_short);
-    let _ = read_response(&mut s);
+    let end_angle = read_encoder(&mut port, &mut driver);
+    println!("End: {:.1}°", end_angle);
+    println!("Moved: {:.1}°", (end_angle - start_angle).abs());
 
-    println!("Step 1: Homing / Go to Zero...");
-    send_command(&mut s, driver.set_zero_speed(0x01)?)?;
+    // === Move 360° counter-clockwise ===
+    println!("\n=== Move 360° Counter-Clockwise ===");
+
+    let start_angle = read_encoder(&mut port, &mut driver);
+    send(
+        &mut port,
+        driver
+            .run_motor(RotationDirection::CounterClockwise, 1, pulses)
+            .unwrap(),
+    );
+    thread::sleep(Duration::from_secs(3));
+
+    let end_angle = read_encoder(&mut port, &mut driver);
+    println!("Moved: {:.1}°", (end_angle - start_angle).abs());
+
+    // === Cleanup ===
+    println!("\n=== Done ===");
+    send(&mut port, driver.stop());
+    send(&mut port, driver.enable_motor(false));
+}
+
+/// Send command and read response
+fn send<S: SerialPort + std::io::Read + std::io::Write>(port: &mut S, cmd: &[u8]) -> Vec<u8> {
+    println!("TX: {:02x?}", cmd);
+    port.write_all(cmd).expect("Write failed");
     thread::sleep(Duration::from_millis(100));
-    send_command(&mut s, driver.go_to_zero())?;
 
-    thread::sleep(pause_move);
-    let _ = read_response(&mut s);
-
-    println!("Reading Start Encoder Value...");
-    send_command(&mut s, driver.read_encoder_value())?;
-    thread::sleep(pause_short);
-    let start_resp = read_response(&mut s)?;
-    if start_resp.is_empty() {
-        return Err(Error::Protocol(
-            "No response for start encoder value".into(),
-        ));
+    let mut buf = [0u8; 64];
+    match port.read(&mut buf) {
+        Ok(n) if n > 0 => {
+            println!("RX: {:02x?}", &buf[..n]);
+            buf[..n].to_vec()
+        }
+        _ => Vec::new(),
     }
-    let start_angle = parse_encoder(&start_resp)?;
-    println!("Start Angle: {:.2}", start_angle);
+}
 
-    let target_angle = 360.0;
-    let pulses = mks_servo42_rs::angle_to_steps(target_angle, MICROSTEPS);
-    println!(
-        "Step 2: Moving {:.2} degrees ({} steps)...",
-        target_angle, pulses
-    );
-
-    send_command(
-        &mut s,
-        driver.run_position(mks_servo42_rs::direction::Direction::Forward, 1, pulses)?,
-    )?;
-
-    thread::sleep(pause_move);
-    let _ = read_response(&mut s);
-
-    println!("Step 3: Reading Encoder Value...");
-    send_command(&mut s, driver.read_encoder_value())?;
-    thread::sleep(pause_short);
-
-    let response = read_response(&mut s)?;
-
-    let end_angle = parse_encoder(&response)?;
-    println!("End Angle: {:.2}", end_angle);
-
-    let moved_angle = (end_angle - start_angle).abs();
-
-    println!("Moved Angle: {:.2} degrees", moved_angle);
-
-    let tolerance = target_angle * 0.10;
-    let diff = (moved_angle - target_angle).abs();
-
-    if diff <= tolerance {
-        println!("SUCCESS: Position within tolerance (diff: {:.2} deg)", diff);
-    } else {
-        println!(
-            "WARNING: Position outside tolerance! (diff: {:.2} deg, expected: {:.2}, got: {:.2})",
-            diff, target_angle, moved_angle
-        );
-    }
-
-    println!("------------ Test 2 ------------");
-    println!(
-        "Setting subdivision to {} (Microsteps: {})...",
-        SUBDIVISION_CODE, MICROSTEPS
-    );
-    send_command(&mut s, driver.set_subdivision(SUBDIVISION_CODE)?)?;
-    thread::sleep(pause_short);
-    let _ = read_response(&mut s);
-
-    println!("Enabling Motor...");
-    send_command(&mut s, driver.enable_motor(true))?;
-    thread::sleep(pause_short);
-    let _ = read_response(&mut s);
-
-    println!("Step 1: Homing / Go to Zero...");
-    send_command(&mut s, driver.set_zero_speed(0x01)?)?;
-    thread::sleep(Duration::from_millis(100));
-    send_command(&mut s, driver.go_to_zero())?;
-
-    thread::sleep(pause_move);
-    let _ = read_response(&mut s);
-
-    println!("Reading Start Encoder Value...");
-    send_command(&mut s, driver.read_encoder_value())?;
-    thread::sleep(pause_short);
-    let start_resp = read_response(&mut s)?;
-    if start_resp.is_empty() {
-        return Err(Error::Protocol(
-            "No response for start encoder value".into(),
-        ));
-    }
-    let start_angle = parse_encoder(&start_resp)?;
-    println!("Start Angle: {:.2}", start_angle);
-
-    let target_angle = 360.0;
-    let pulses = mks_servo42_rs::angle_to_steps(target_angle, MICROSTEPS);
-    println!(
-        "Step 2: Moving {:.2} degrees ({} steps)...",
-        target_angle, pulses
-    );
-
-    send_command(
-        &mut s,
-        driver.run_position(mks_servo42_rs::direction::Direction::Reverse, 1, pulses)?,
-    )?;
-
-    thread::sleep(pause_move);
-    let _ = read_response(&mut s);
-
-    println!("Step 3: Reading Encoder Value...");
-    send_command(&mut s, driver.read_encoder_value())?;
-    thread::sleep(pause_short);
-
-    let response = read_response(&mut s)?;
-
-    let end_angle = parse_encoder(&response)?;
-    println!("End Angle: {:.2}", end_angle);
-
-    let moved_angle = (end_angle - start_angle).abs();
-
-    println!("Moved Angle: {:.2} degrees", moved_angle);
-
-    let tolerance = target_angle * 0.10;
-    let diff = (moved_angle - target_angle).abs();
-
-    if diff <= tolerance {
-        println!("SUCCESS: Position within tolerance (diff: {:.2} deg)", diff);
-    } else {
-        println!(
-            "WARNING: Position outside tolerance! (diff: {:.2} deg, expected: {:.2}, got: {:.2})",
-            diff, target_angle, moved_angle
-        );
-    }
-
-    println!("Reading motor shaft angle error");
-    let cmd = driver.read_motor_shaft_angle_error();
-    send_command(&mut s, cmd)?;
-
-    thread::sleep(Duration::from_millis(100));
-    let response = read_response(&mut s)?;
-    let shaft_err_value = mks_servo42_rs::parse_motor_shaft_angle_error(&response)?;
-    println!("Shaft Error Angle: {:?}", shaft_err_value.to_degrees());
-    Ok(())
+/// Read encoder and return angle in degrees
+fn read_encoder(port: &mut impl SerialPort, driver: &mut Driver) -> f32 {
+    let response = send(port, driver.read_encoder_value());
+    mks_servo42_rs::parse_encoder_response(&response)
+        .expect("Failed to parse encoder")
+        .to_degrees()
 }

@@ -61,3 +61,35 @@ pub enum ZeroMode {
     /// Near-point-based return to zero.
     NearMode = 0x02,
 }
+
+/// Save/Clear status operation.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SaveClearStatus {
+    /// Save the current status.
+    Save = 0xC8,
+    /// Clear the saved status.
+    Clear = 0xCA,
+}
+
+/// Motor shaft status.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ShaftStatus {
+    /// Motor is blocked (resistance detected).
+    Blocked = 0x01,
+    /// Motor is unblocked (running freely).
+    Unblocked = 0x02,
+    /// Error reading status.
+    Error = 0x00,
+}
+
+/// Rotation direction configuration.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum RotationDirection {
+    /// Clockwise rotation (CW).
+    Clockwise = 0x00,
+    /// Counter-clockwise rotation (CCW).
+    CounterClockwise = 0x01,
+}
