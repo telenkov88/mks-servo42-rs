@@ -12,6 +12,8 @@ This library provides a type-safe interface for generating the serial protocol c
 - **Type-safe** - Rust enums for directions, modes, and status values
 - **Response parsing** - Helpers for parsing encoder values, shaft status, and other responses
 
+![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/telenkov88/520c3f3e52c8c80efb05f570f27bc1d2/raw/mks-servo42-rs.json)
+
 ## Supported Commands
 
 ### Read Commands
