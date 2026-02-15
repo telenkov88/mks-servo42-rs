@@ -1,0 +1,40 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  
+jobs:
+  lint-and-coverage:
+    name: Lint and Coverage
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: make install-deps
+
+      - name: Run Clippy (Lint)
+        run: make lint
+
+      - name: Run Tests and Generate Coverage
+        run: make coverage
+
+      - name: Generate Coverage Summary
+        run: |
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          grcov target/coverage --binary-path ./target/debug/deps/ -s . -t markdown --branch --ignore-not-existing --ignore "/*" --ignore "tests/*" --excl-line "#\[test\]" --excl-start "mod tests \{" --excl-stop "^\}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload Cobertura Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-cobertura
+          path: target/coverage/cobertura.xml
+          if-no-files-found: error
