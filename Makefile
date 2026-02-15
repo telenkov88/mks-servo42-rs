@@ -40,6 +40,6 @@ clean:
 	cargo clean
 
 install-deps:
-	cargo install cargo-llvm-cov grcov
-
+	rustup component add llvm-tools
+	cargo install grcov --locked || echo "grcov already installed"
 .PHONY: build lint fmt test coverage doc check-publish publish-dry-run publish clean install-deps
