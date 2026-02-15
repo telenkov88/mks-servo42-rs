@@ -14,6 +14,11 @@ jobs:
     name: Lint and Coverage
     runs-on: self-hosted
 
+    environment: rpi4 
+    env:
+      CARGO_TERM_COLOR: always
+      MKS_ENV_SERVO42C_UART: ${{ vars.MKS_ENV_SERVO42C_UART }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
