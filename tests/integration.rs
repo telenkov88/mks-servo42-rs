@@ -11,12 +11,12 @@ mod test_utils;
 // use mks_servo42_rs::direction::Direction; (removed)
 use mks_servo42_rs::{EnLogic, RotationDirection, SaveClearStatus, ZeroMode};
 use safety::{
-    validate_safe_angle, validate_safe_speed, MAX_SAFE_ANGLE_DEGREES, MAX_SAFE_SPEED,
-    SAFE_MICROSTEPS,
+    MAX_SAFE_ANGLE_DEGREES, MAX_SAFE_SPEED, SAFE_MICROSTEPS, validate_safe_angle,
+    validate_safe_speed,
 };
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
-use test_utils::{init_env, TestContext, TestError, TestResult, LONG_PAUSE, TEST_MUTEX};
+use test_utils::{LONG_PAUSE, TEST_MUTEX, TestContext, TestError, TestResult, init_env};
 
 /// Guard to ensure motor is stopped even if test panics or fails
 struct AutoStopGuard<'a> {
@@ -549,17 +549,9 @@ fn test_read_pulse_count() -> TestResult<()> {
 
     if !response.is_empty() {
         println!("Pulse count response: {:02x?}", response);
-        // Parse 4-byte signed integer
-        if response.len() >= 6 {
-            // address + 4 bytes + checksum
-            let pulse_bytes = &response[1..5];
-            let pulses = i32::from_be_bytes([
-                pulse_bytes[0],
-                pulse_bytes[1],
-                pulse_bytes[2],
-                pulse_bytes[3],
-            ]);
-            println!("Pulse count: {}", pulses);
+        match test_utils::parse_pulse_count_response(&response) {
+            Ok(pulses) => println!("Pulse count: {}", pulses),
+            Err(e) => println!("Failed to parse pulse count: {:?}", e),
         }
     } else {
         println!("No pulse count response received");
