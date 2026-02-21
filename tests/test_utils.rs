@@ -283,6 +283,18 @@ pub fn parse_motor_shaft_angle_error_response(data: &[u8]) -> TestResult<f32> {
     }
 }
 
+/// Helper to parse pulse count response
+#[allow(dead_code)]
+pub fn parse_pulse_count_response(data: &[u8]) -> TestResult<i32> {
+    match mks_servo42_rs::parse_pulse_count_response(data) {
+        Ok(pulses) => Ok(pulses),
+        Err(e) => Err(TestError::Protocol(format!(
+            "Parse error: {:?}",
+            e.as_str()
+        ))),
+    }
+}
+
 /// Helper to parse EN pin status response
 #[allow(dead_code)]
 pub fn parse_en_pin_status_response(data: &[u8]) -> TestResult<mks_servo42_rs::EnPinStatus> {

@@ -72,6 +72,36 @@ pub fn parse_encoder_response(data: &[u8]) -> Result<EncoderValue, Error> {
     Err(Error::InvalidPacket)
 }
 
+/// Parses the pulse count response.
+///
+/// This function parses responses from the `READ_PULSE_COUNT` command (0x33).
+/// The response format is: `[slave_address, pulse_byte1, pulse_byte2, pulse_byte3, pulse_byte4, crc]`
+/// where the pulse count is a signed 32-bit integer.
+pub fn parse_pulse_count_response(data: &[u8]) -> Result<i32, Error> {
+    let mut idx = 0;
+    while idx < data.len() {
+        if data[idx] >= crate::MIN_ADDRESS
+            && data[idx] <= crate::MAX_ADDRESS
+            && idx + 5 < data.len()
+        {
+            let sum: u32 = data[idx..idx + 5].iter().map(|&b| u32::from(b)).sum();
+            if (sum as u8) == data[idx + 5] {
+                let pulse_bytes = &data[idx + 1..idx + 5];
+                let value = i32::from_be_bytes([
+                    pulse_bytes[0],
+                    pulse_bytes[1],
+                    pulse_bytes[2],
+                    pulse_bytes[3],
+                ]);
+                return Ok(value);
+            }
+        }
+        idx += 1;
+    }
+
+    Err(Error::InvalidPacket)
+}
+
 /// Represents an encoder shaft error.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ShaftErrValue {
@@ -345,6 +375,47 @@ mod tests {
     fn test_parse_encoder_response_invalid_checksum() {
         let data = [0xE0, 0x00, 0x00, 0x00, 0x00, 0x40, 0x00, 0x21];
         let res = parse_encoder_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_pulse_count_response() {
+        // e0 00 00 00 00 e0 (pulse count 0)
+        let data = [0xE0, 0x00, 0x00, 0x00, 0x00, 0xE0];
+        let val = parse_pulse_count_response(&data).unwrap();
+        assert_eq!(val, 0);
+
+        // e0 00 00 00 01 e1 (pulse count 1)
+        let data = [0xE0, 0x00, 0x00, 0x00, 0x01, 0xE1];
+        let val = parse_pulse_count_response(&data).unwrap();
+        assert_eq!(val, 1);
+
+        // Negative: -1
+        // FF FF FF FF
+        // E0 + FF + FF + FF + FF = 0x4DC -> DC
+        let data = [0xE0, 0xFF, 0xFF, 0xFF, 0xFF, 0xDC];
+        let val = parse_pulse_count_response(&data).unwrap();
+        assert_eq!(val, -1);
+    }
+
+    #[test]
+    fn test_parse_pulse_count_response_with_prefix() {
+        let data = [0xFF, 0xFE, 0xE0, 0x00, 0x00, 0x00, 0x01, 0xE1];
+        let val = parse_pulse_count_response(&data).unwrap();
+        assert_eq!(val, 1);
+    }
+
+    #[test]
+    fn test_parse_pulse_count_response_invalid_checksum() {
+        let data = [0xE0, 0x00, 0x00, 0x00, 0x01, 0xE2];
+        let res = parse_pulse_count_response(&data);
+        assert!(matches!(res, Err(Error::InvalidPacket)));
+    }
+
+    #[test]
+    fn test_parse_pulse_count_response_too_short() {
+        let data = [0xE0, 0x00, 0x00, 0x00, 0x01];
+        let res = parse_pulse_count_response(&data);
         assert!(matches!(res, Err(Error::InvalidPacket)));
     }
 

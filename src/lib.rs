@@ -17,10 +17,10 @@ pub use enums::{
 };
 pub use errors::Error;
 pub use helpers::{
-    angle_to_steps, encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
-    parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, parse_shaft_status_response,
-    parse_success_response, strip_leading_garbage, EnPinStatus, EncoderValue, MotorShaftAngle,
-    ShaftErrValue,
+    EnPinStatus, EncoderValue, MotorShaftAngle, ShaftErrValue, angle_to_steps,
+    encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
+    parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, parse_pulse_count_response,
+    parse_shaft_status_response, parse_success_response, strip_leading_garbage,
 };
 pub use response::{InvalidResponse, Response};
 
