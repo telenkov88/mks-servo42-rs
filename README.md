@@ -78,6 +78,20 @@ These commands are intentionally not implemented as this crate is designed for *
 | Set UART address | 0x8B | Address change requires reconnection |
 | Restore defaults | 0x3F | Would reset to non-UART mode |
 
+## Helper Functions
+
+The `helpers` module provides utility functions for parsing raw serial responses:
+
+- `parse_encoder_response` - Parse absolute encoder position (`0x30`).
+- `parse_pulse_count_response` - Parse received pulse count (`0x33`).
+- `parse_motor_shaft_angle_response` - Parse motor shaft angle (`0x36`).
+- `parse_motor_shaft_angle_error` - Parse motor shaft angle error (`0x39`).
+- `parse_en_pin_status_response` - Parse EN pin status (`0x3A`).
+- `parse_shaft_status_response` - Parse shaft blocked/unblocked status (`0x3E`).
+- `parse_success_response` - Parse standard 3-byte success/failure responses.
+- `strip_leading_garbage` - Strip leading garbage bytes from serial buffers before valid packets.
+- `angle_to_steps` / `encoder_val_to_degrees` - Convert between angles and steps/encoder units.
+
 ## Usage Example
 
 ```rust
