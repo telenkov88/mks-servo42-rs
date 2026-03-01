@@ -1,6 +1,6 @@
 [package]
 name = "mks-servo42-rs"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 description = "A generic, `no_std` Rust driver for MKS SERVO42 closed-loop stepper motors."
@@ -11,6 +11,27 @@ documentation = "https://docs.rs/mks-servo42-rs"
 readme = "README.md"
 keywords = ["stepper", "driver", "embedded", "no_std", "mks"]
 categories = ["embedded", "hardware-support", "no-std"]
+
+
+[lib]
+name = "mks_servo42_rs"
+path = "src/lib.rs"
+
+[[example]]
+name = "base"
+path = "examples/base.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"
+
+[[test]]
+name = "safety"
+path = "tests/safety.rs"
+
+[[test]]
+name = "test_utils"
+path = "tests/test_utils.rs"
 
 [lints.rust]
 unsafe_code = "forbid"

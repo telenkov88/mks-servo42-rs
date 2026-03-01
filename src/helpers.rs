@@ -318,6 +318,43 @@ pub fn parse_success_response(data: &[u8]) -> Result<crate::Response, Error> {
     Err(Error::InvalidPacket)
 }
 
+/// Calculates the expected RPM `(Vrpm)` for a given speed setting and microstepping level.
+///
+/// Formula from the manufacturer for a 1.8° motor (200 steps/rev):
+/// `Vrpm = (Speed × 30000) / (Microsteps × 200)`
+///
+/// Per MKS firmware: subdivision setting 0x00 = 256 microsteps, 0x01 = 1, 0xFF = 255.
+#[must_use]
+pub fn speed_setting_to_rpm(speed: u8, microsteps: u16) -> f32 {
+    let effective_usteps = if microsteps == 0 { 256 } else { microsteps };
+    (speed as f32 * 30000.0) / (f32::from(effective_usteps) * STEPS_PER_REV)
+}
+
+/// Estimates the duration of a move based on speed, pulses, and microsteps.
+/// This function does not take acceleration into account.
+///
+/// Per MKS firmware: subdivision setting 0x00 = 256 microsteps, 0x01 = 1, 0xFF = 255.
+/// # Returns
+/// Estimated `Duration`.
+pub fn estimate_move_duration(speed: u8, pulses: u32, microsteps: u16) -> core::time::Duration {
+    if speed == 0 || pulses == 0 {
+        return core::time::Duration::ZERO;
+    }
+    let effective_usteps = if microsteps == 0 { 256_u16 } else { microsteps };
+
+    let rpm = f64::from(speed_setting_to_rpm(speed, effective_usteps));
+    let pulses_per_rev = 200.0_f64 * f64::from(effective_usteps);
+    let theoretical_pps = (rpm * pulses_per_rev) / 60.0;
+
+    let raw_secs = if theoretical_pps > 0.0 {
+        f64::from(pulses) / theoretical_pps
+    } else {
+        0.0
+    };
+
+    core::time::Duration::from_secs_f64(raw_secs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,6 +389,97 @@ mod tests {
             value: 32768,
         }; // 180 degrees
         assert_eq!(ev.to_degrees(), 180.0);
+    }
+
+    // ── speed_setting_to_rpm ────────────────────────────────────────────────
+
+    #[test]
+    fn test_speed_setting_to_rpm_microsteps_zero_means_256() {
+        let rpm_256 = speed_setting_to_rpm(1, 256);
+        let rpm_0 = speed_setting_to_rpm(1, 0);
+        assert!(
+            (rpm_256 - rpm_0).abs() < 1e-6,
+            "microsteps=0 must equal microsteps=256"
+        );
+    }
+
+    #[test]
+    fn test_speed_setting_to_rpm_formula() {
+        // Vrpm = (speed × 30000) / (microsteps × 200)
+        let expected = (4.0_f32 * 30000.0) / (2.0 * 200.0);
+        assert!((speed_setting_to_rpm(4, 2) - expected).abs() < 1e-4);
+    }
+
+    // ── estimate_move_duration ──────────────────────────────────────────────
+    //
+    // The microsteps cancel in the formula, so PPS always simplifies to
+    // speed × 500, giving: duration = pulses / (speed × 500).
+
+    fn expected_secs(speed: u8, pulses: u32) -> f64 {
+        f64::from(pulses) / (f64::from(speed) * 500.0)
+    }
+
+    fn assert_duration_approx(speed: u8, pulses: u32, microsteps: u16) {
+        let got = estimate_move_duration(speed, pulses, microsteps).as_secs_f64();
+        let want = expected_secs(speed, pulses);
+        assert!(
+            (got - want).abs() < 1e-6,
+            "speed={speed} pulses={pulses} microsteps={microsteps}: got {got:.6}s, want {want:.6}s"
+        );
+    }
+
+    #[test]
+    fn test_estimate_move_duration_zero_speed() {
+        assert_eq!(
+            estimate_move_duration(0, 1000, 4),
+            core::time::Duration::ZERO
+        );
+    }
+
+    #[test]
+    fn test_estimate_move_duration_zero_pulses() {
+        assert_eq!(estimate_move_duration(5, 0, 4), core::time::Duration::ZERO);
+    }
+
+    #[test]
+    fn test_estimate_move_duration_microsteps_zero_means_256() {
+        let with_256 = estimate_move_duration(1, 500, 256);
+        let with_0 = estimate_move_duration(1, 500, 0);
+        assert_eq!(with_256, with_0, "microsteps=0 must equal microsteps=256");
+    }
+
+    #[test]
+    fn test_estimate_move_duration_speed1_pulses500_usteps1() {
+        // duration = 500 / (1 × 500) = 1.0s
+        assert_duration_approx(1, 500, 1);
+    }
+
+    #[test]
+    fn test_estimate_move_duration_speed1_pulses2000_usteps1() {
+        // hardware test baseline: duration = 2000 / 500 = 4.0s
+        assert_duration_approx(1, 2000, 1);
+    }
+
+    #[test]
+    fn test_estimate_move_duration_speed8_pulses8000_usteps4() {
+        // hardware test case: duration = 8000 / (8 × 500) = 2.0s
+        assert_duration_approx(8, 8000, 4);
+    }
+
+    #[test]
+    fn test_estimate_move_duration_microsteps_do_not_affect_duration() {
+        // PPS = speed × 500 regardless of microsteps, so duration must be identical
+        let d1 = estimate_move_duration(4, 1000, 1);
+        let d8 = estimate_move_duration(4, 1000, 8);
+        let d256 = estimate_move_duration(4, 1000, 256);
+        assert_eq!(
+            d1, d8,
+            "duration must be identical across microstep settings"
+        );
+        assert_eq!(
+            d8, d256,
+            "duration must be identical across microstep settings"
+        );
     }
 
     #[test]

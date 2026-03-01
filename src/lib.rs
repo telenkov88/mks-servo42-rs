@@ -18,9 +18,10 @@ pub use enums::{
 pub use errors::Error;
 pub use helpers::{
     EnPinStatus, EncoderValue, MotorShaftAngle, ShaftErrValue, angle_to_steps,
-    encoder_val_to_degrees, parse_en_pin_status_response, parse_encoder_response,
-    parse_motor_shaft_angle_error, parse_motor_shaft_angle_response, parse_pulse_count_response,
-    parse_shaft_status_response, parse_success_response, strip_leading_garbage,
+    encoder_val_to_degrees, estimate_move_duration, parse_en_pin_status_response,
+    parse_encoder_response, parse_motor_shaft_angle_error, parse_motor_shaft_angle_response,
+    parse_pulse_count_response, parse_shaft_status_response, parse_success_response,
+    speed_setting_to_rpm, strip_leading_garbage,
 };
 pub use response::{InvalidResponse, Response};
 
@@ -35,8 +36,8 @@ pub const MAX_ADDRESS: u8 = 0xE9;
 pub const MAX_SPEED: u8 = 0x7F;
 /// Maximum index for current limit settings.
 pub const MAX_CURRENT_INDEX: u8 = 0x0F;
-/// Maximum index for subdivision (microstepping).
-pub const MAX_SUBDIVISION_INDEX: u8 = 0x08;
+/// Direct subdivision (microstepping) value is passed. 0 indicates 256.
+pub const MAX_SUBDIVISION: u8 = 0xFF;
 /// Maximum speed index for return-to-zero.
 pub const MAX_ZERO_SPEED: u8 = 0x04;
 
@@ -176,10 +177,10 @@ impl Driver {
             self.address,
             cmd::RUN_MOTOR,
             speed | dir_mask,
-            pulse_bytes[0],
-            pulse_bytes[1],
-            pulse_bytes[2],
-            pulse_bytes[3],
+            pulse_bytes[0], // Data4: MSB
+            pulse_bytes[1], // Data3
+            pulse_bytes[2], // Data2
+            pulse_bytes[3], // Data1: LSB
         ]))
     }
 
@@ -200,14 +201,9 @@ impl Driver {
     }
 
     /// Generates a command to set the subdivision (microstepping) level.
-    ///
-    /// # Errors
-    /// Returns `Error::InvalidValue` if index exceeds `MAX_SUBDIVISION_INDEX`.
-    pub fn set_subdivision(&mut self, step_index: u8) -> Result<&[u8]> {
-        if step_index > MAX_SUBDIVISION_INDEX {
-            return Err(Error::InvalidValue);
-        }
-        Ok(self.build_command(&[self.address, cmd::SET_SUBDIVISION, step_index]))
+    /// Values 1-255 map directly to 1-255 microsteps. The value 0 sets 256 microsteps.
+    pub fn set_subdivision(&mut self, subdivision: u8) -> Result<&[u8]> {
+        Ok(self.build_command(&[self.address, cmd::SET_SUBDIVISION, subdivision]))
     }
 
     /// Generates a command to set the enable logic.
@@ -383,18 +379,6 @@ mod tests {
 
         let driver_max = Driver::with_address(MAX_ADDRESS);
         assert_eq!(driver_max.address, MAX_ADDRESS);
-    }
-
-    #[test]
-    fn test_set_subdivision_invalid_value() {
-        let mut driver = Driver::default();
-        // MAX_SUBDIVISION_INDEX is 0x08, so 0x09 should fail
-        let result = driver.set_subdivision(MAX_SUBDIVISION_INDEX + 1);
-        assert!(matches!(result, Err(Error::InvalidValue)));
-
-        // Valid value should succeed
-        let result = driver.set_subdivision(MAX_SUBDIVISION_INDEX);
-        assert!(result.is_ok());
     }
 
     #[test]
