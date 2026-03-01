@@ -34,7 +34,9 @@ jobs:
         run: make lint
 
       - name: Run Tests and Generate Coverage
-        run: make coverage
+        run: |
+          systemctl restart ser2net
+          make coverage
 
       - name: Generate Coverage & Update Gist
         run: |
