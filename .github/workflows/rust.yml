@@ -18,6 +18,9 @@ jobs:
     env:
       CARGO_TERM_COLOR: always
       MKS_ENV_SERVO42C_UART: ${{ vars.MKS_ENV_SERVO42C_UART }}
+      PICO_ENCODER_UART: ${{ vars.PICO_ENCODER_UART }}
+      PICO_ENCODER_STEPS_PER_REVOLUTION: ${{ vars.PICO_ENCODER_STEPS_PER_REVOLUTION }}
+      MKS_ENCODER_CHANNEL: ${{ vars.MKS_ENCODER_CHANNEL }}
       GIST_SECRET: ${{ secrets.GIST_SECRET }}
       GIST_ID: 520c3f3e52c8c80efb05f570f27bc1d2
 
@@ -34,7 +37,9 @@ jobs:
         run: make lint
 
       - name: Run Tests and Generate Coverage
-        run: make coverage
+        run: |
+          sudo systemctl restart ser2net
+          make coverage
 
       - name: Generate Coverage & Update Gist
         run: |
@@ -53,3 +58,17 @@ jobs:
           curl -L -X PATCH -H "Authorization: token $GIST_SECRET" \
           -d "{\"files\":{\"mks-servo42-rs.json\":{\"content\": $(echo "$JSON_CONTENT" | jq -R .) }}}" \
           https://api.github.com/gists/$GIST_ID
+
+      - name: Upload HTML Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/coverage/html/
+          retention-days: 30
+
+      - name: Upload Cobertura Coverage Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-cobertura
+          path: target/coverage/cobertura.xml
+          retention-days: 30
