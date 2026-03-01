@@ -35,7 +35,7 @@ jobs:
 
       - name: Run Tests and Generate Coverage
         run: |
-          systemctl restart ser2net
+          sudo systemctl restart ser2net
           make coverage
 
       - name: Generate Coverage & Update Gist
