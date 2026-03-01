@@ -32,7 +32,7 @@ This library provides a type-safe interface for generating the serial protocol c
 |---------|------|-------------|
 | `calibrate_encoder` | 0x80 | Calibrate encoder (motor must be unloaded) |
 | `set_current_limit` | 0x83 | Set current limit (0-15 → 0-3000mA) |
-| `set_subdivision` | 0x84 | Set microstepping (1-256) |
+| `set_subdivision` | 0x84 | Set microstepping (0-255), 0 = 256 subdivision |
 | `set_enable_logic` | 0x85 | Set EN pin logic (Low/High/AlwaysOn) |
 | `set_direction` | 0x86 | Set default rotation direction |
 | `set_auto_screen_off` | 0x87 | Enable/disable auto screen off |
@@ -80,17 +80,22 @@ These commands are intentionally not implemented as this crate is designed for *
 
 ## Helper Functions
 
-The `helpers` module provides utility functions for parsing raw serial responses:
+The `helpers` module provides utility functions for parsing raw serial responses and performing motion calculations:
 
-- `parse_encoder_response` - Parse absolute encoder position (`0x30`).
-- `parse_pulse_count_response` - Parse received pulse count (`0x33`).
-- `parse_motor_shaft_angle_response` - Parse motor shaft angle (`0x36`).
-- `parse_motor_shaft_angle_error` - Parse motor shaft angle error (`0x39`).
-- `parse_en_pin_status_response` - Parse EN pin status (`0x3A`).
-- `parse_shaft_status_response` - Parse shaft blocked/unblocked status (`0x3E`).
-- `parse_success_response` - Parse standard 3-byte success/failure responses.
-- `strip_leading_garbage` - Strip leading garbage bytes from serial buffers before valid packets.
-- `angle_to_steps` / `encoder_val_to_degrees` - Convert between angles and steps/encoder units.
+| Function | Description |
+|----------|-------------|
+| `parse_encoder_response` | Parse absolute encoder position (`0x30`) |
+| `parse_pulse_count_response` | Parse received pulse count (`0x33`) |
+| `parse_motor_shaft_angle_response` | Parse motor shaft angle (`0x36`) |
+| `parse_motor_shaft_angle_error` | Parse motor shaft angle error (`0x39`) |
+| `parse_en_pin_status_response` | Parse EN pin status (`0x3A`) |
+| `parse_shaft_status_response` | Parse shaft blocked/unblocked status (`0x3E`) |
+| `parse_success_response` | Parse standard 3-byte success/failure responses |
+| `strip_leading_garbage` | Strip leading garbage bytes from serial buffers before valid packets |
+| `angle_to_steps` | Convert angle (degrees) to pulse count for a given microstepping level |
+| `encoder_val_to_degrees` | Convert a 16-bit encoder value to degrees (0–360) |
+| `speed_setting_to_rpm` | Convert a speed setting byte + microsteps to RPM using the MKS formula |
+| `estimate_move_duration` | Estimate move duration from speed, pulse count, and microsteps (no acceleration) |
 
 ## Usage Example
 
